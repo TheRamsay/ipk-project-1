@@ -1,0 +1,17 @@
+﻿using App.Models;
+
+namespace App.Transport;
+
+public interface ITransport
+{
+    public event EventHandler<BaseModel> OnMessage;
+    
+    public Task Auth(AuthModel data);
+    public Task Join(JoinModel data);
+    public Task Message(MessageModel data);
+    public Task Error(MessageModel data);
+    public Task Reply(ReplyModel data);
+    public Task Bye();
+    public Task Start();
+    public Task Disconnect();
+}
