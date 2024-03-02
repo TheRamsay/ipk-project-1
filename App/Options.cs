@@ -1,6 +1,6 @@
 using System;
-using CommandLine;
 using IPK.Project1.App.Enums;
+using CommandLine;
 
 namespace IPK.Project1.App;
 
