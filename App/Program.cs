@@ -1,9 +1,9 @@
 ﻿using System.Net.Sockets;
 using System.Text;
+using App.Enums;
 using CommandLine;
-using IPK.Project1.App.Enums;
 
-namespace IPK.Project1.App;
+namespace App;
 
 static class Program
 {

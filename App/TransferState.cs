@@ -1,7 +1,7 @@
 ﻿using System.Net.Sockets;
-using IPK.Project1.App.Enums;
+using App.Enums;
 
-namespace IPK.Project1.App;
+namespace App;
 
 public class TransferState
 {
