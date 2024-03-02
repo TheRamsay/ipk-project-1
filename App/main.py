@@ -37,7 +37,6 @@ def start_server():
         print("Server shutting down")
         server_socket.close()
 
-
 def handle_client(client_socket):
     while True:
         data = client_socket.recv(1024)
@@ -75,6 +74,7 @@ def handle_client(client_socket):
             case ["ERROR", "FROM", display_name, "IS", *content]:
                 client_socket.sendall(f"BYE\r\n".encode('utf-8'))
             case ["BYE"]:
+                print("Received bye 😭")
                 client_socket.close()
                 return
             case _:
