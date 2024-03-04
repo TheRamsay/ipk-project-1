@@ -1,10 +1,10 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using App.Enums;
 
 namespace App.Models;
 
-public class JoinModel : BaseModel
+public class JoinModel : IBaseModel
 {
-    
     [RegularExpression("[A-z0-9-]{1, 20}", ErrorMessage = "ChannelId has to be alphanumerical with length from 1 to 20 characters")]
     public required string ChannelId { get; set; }
     

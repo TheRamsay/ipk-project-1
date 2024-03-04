@@ -15,7 +15,7 @@ public class TcpTransport : ITransport
 
     private NetworkStream? _stream;
 
-    public event EventHandler<BaseModel> OnMessage;
+    public event EventHandler<IBaseModel> OnMessage;
 
     public TcpTransport(string host, int port, CancellationToken cancellationToken)
     {
@@ -27,9 +27,10 @@ public class TcpTransport : ITransport
     public async Task Start()
     {
         await _client.ConnectAsync(_host, _port, _cancellationToken);
-        Console.WriteLine("Connected sheeesh 🦞");
         _stream = _client.GetStream();
+        
         _stream.ReadTimeout = 20000;
+        Console.WriteLine("Connected sheeesh 🦞");
 
         while (!_cancellationToken.IsCancellationRequested)
         {
@@ -93,7 +94,7 @@ public class TcpTransport : ITransport
         }
     }
 
-    private BaseModel ParseMessage(string message)
+    private IBaseModel ParseMessage(string message)
         => message.Split(" ") switch
         {
             ["JOIN", var channelId, "AS", var dName] => new JoinModel() { ChannelId = channelId, DisplayName = dName },

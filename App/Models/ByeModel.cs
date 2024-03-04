@@ -1,6 +1,7 @@
-﻿namespace App.Models;
+﻿using App.Enums;
 
-public class ByeModel : BaseModel
+namespace App.Models;
+
+public class ByeModel : IBaseModel
 {
-    
 }

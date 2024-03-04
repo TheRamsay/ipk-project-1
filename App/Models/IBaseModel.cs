@@ -1,6 +1,5 @@
 ﻿namespace App.Models;
 
-public class BaseModel
+public interface IBaseModel
 {
-    
 }

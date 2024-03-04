@@ -1,8 +1,9 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using App.Enums;
 
 namespace App.Models;
 
-public class AuthModel : BaseModel
+public class AuthModel : IBaseModel
 {
     [RegularExpression("[A-z0-9-]{1, 20}", ErrorMessage = "Username has to be alphanumerical with length from 1 to 20 characters")]
     public required string Username { get; set; }

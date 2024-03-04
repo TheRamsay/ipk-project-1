@@ -1,5 +1,6 @@
 ﻿using App.Enums;
 using App.Models;
+using App.Models.udp;
 using App.Transport;
 
 namespace App;
@@ -22,21 +23,13 @@ public class ChatClient
 
     public async Task Start()
     {
-        Task transporterTask = _transport.Start();
-        Task stdinTask = ReadInputAsync();
+        // Task transporterTask = _transport.Start();
+        // Task stdinTask = ReadInputAsync();
 
-        try
-        {
-            await Task.WhenAll(transporterTask, stdinTask);
-        }
-        catch (Exception e)
-        {
-           Console.WriteLine($"ERROR: {e}");
-        }
-        finally
-        {
-            await _transport.Disconnect();
-        }
+        var x = IBaseUdpModel.Serialize(new UdpAuthModel(){ Username = "Ramsay", DisplayName = "Gordon", Secret = "1234" });
+        Console.WriteLine(x);
+        var y = IBaseUdpModel.Deserialize(x);
+        Console.WriteLine(y);
     }
     
     private async Task ReadInputAsync()
@@ -118,7 +111,7 @@ public class ChatClient
         }
     }
 
-    private async void OnMessageReceived(object? sender, BaseModel args)
+    private async void OnMessageReceived(object? sender, IBaseModel args)
     {
         
         switch (args)

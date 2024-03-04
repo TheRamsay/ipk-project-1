@@ -1,8 +1,9 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using App.Enums;
 
 namespace App.Models;
 
-public class MessageModel : BaseModel
+public class MessageModel : IBaseModel
 {
     [RegularExpression("[0x21-7E]{0, 1400}", ErrorMessage = "MessageContent has to have printable characters with length from 1 to 128 characters")]
     public required string Content { get; set; }
