@@ -1,4 +1,4 @@
-namespace IPK.Project1.App.Enums;
+namespace App.Enums;
 
 public enum TransportProtocol
 {

@@ -1,6 +1,6 @@
-namespace IPK.Project1.App.Enums;
+namespace App.Enums;
 
-public enum MessageType
+public enum UdpMessageType: byte
 {
     Confirm = 0x00,
     Reply = 0x01,

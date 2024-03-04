@@ -1,8 +1,8 @@
 using System;
+using App.Enums;
 using CommandLine;
-using IPK.Project1.App.Enums;
 
-namespace IPK.Project1.App;
+namespace App;
 
 public class Options
 {
