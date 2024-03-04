@@ -15,42 +15,56 @@ public interface IBaseUdpModel: IBaseModel
         foreach (var property in properties)
         {
             var propertyValue = property.GetValue(model);
+            Type propertyType = property.PropertyType;
 
-            switch (propertyValue)
+            if (propertyType == typeof(UdpMessageType))
             {
-                case int intValue:
-                    binaryWriter.Write(intValue);
-                    break;
-                case short shortValue:
-                    binaryWriter.Write(shortValue);
-                    break;
-                case string stringValue:
-                {
-                    var strData = Encoding.ASCII.GetBytes(stringValue);
-                    binaryWriter.Write(strData);
-                    binaryWriter.Write((byte)0);
-                    break;
-                }
-                case UdpMessageModel udpMessageType:
-                    binaryWriter.Write((byte)udpMessageType.MessageType);
-                    break;
-                default:
-                    throw new NotImplementedException("Property type not implemented");
+                binaryWriter.Write((byte)propertyValue);
+            } 
+            else if (propertyType == typeof(string))
+            {
+                var strData = Encoding.ASCII.GetBytes((string)propertyValue);
+                binaryWriter.Write(strData);
+                binaryWriter.Write((byte)0);
             }
+            else if (propertyType == typeof(int))
+            {
+                binaryWriter.Write((int)propertyValue);
+            }
+            else if (propertyType == typeof(short))
+            {
+                binaryWriter.Write((short)propertyValue);
+            }
+            else
+            {
+                throw new NotImplementedException("Property type not implemented");
+            }
+
         }
 
         return memoryStream.ToArray();
     }
     
-    public static T Deserialize<T>(byte[] data) where T : IBaseUdpModel, new()
+    public static IBaseUdpModel Deserialize(byte[] data)
     {
-        T model = new T();
-        Type modelType = model.GetType();
+        var messageTypeToModel = new Dictionary<UdpMessageType, Type>
+        {
+            {UdpMessageType.Auth, typeof(UdpAuthModel)},
+            {UdpMessageType.Confirm, typeof(UdpConfirmModel)},
+            {UdpMessageType.Join, typeof(UdpJoinModel)},
+            {UdpMessageType.Msg, typeof(UdpMessageModel)},
+            {UdpMessageType.Reply, typeof(UdpReplyModel)},
+            {UdpMessageType.Err, typeof(UdpErrorModel)},
+            {UdpMessageType.Bye, typeof(UdpByeModel)}
+        };
+
+        Type modelType = messageTypeToModel[(UdpMessageType)data[0]];
+        var model = (IBaseUdpModel)Activator.CreateInstance(modelType);
         
         using var memoryStream = new MemoryStream(data);
         using var binaryReader = new BinaryReader(memoryStream);
         
-        var properties = modelType.GetType().GetProperties();
+        var properties = modelType.GetProperties();
 
         foreach (var property in properties)
         {

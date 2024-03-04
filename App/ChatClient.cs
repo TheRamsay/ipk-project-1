@@ -17,32 +17,29 @@ public class ChatClient
     {
         _cancellationTokenSource = cancellationTokenSource;
         _transport = transport;
+        
         _transport.OnMessage += OnMessageReceived;
+        
         _protocolState = ProtocolState.Start;
     }
 
     public async Task Start()
     {
-        // Task transporterTask = _transport.Start();
-        // Task stdinTask = ReadInputAsync();
-        //
-        // try
-        // {
-        //     await Task.WhenAll(transporterTask, stdinTask);
-        // }
-        // catch (Exception e)
-        // {
-        //     Console.WriteLine($"ERROR: {e}");
-        // }
-        // finally
-        // {
-        //     await _transport.Disconnect();
-        // }
-
-        var x = IBaseUdpModel.Serialize(new UdpAuthModel(){ Username = "Ramsay", DisplayName = "Gordon", Secret = "1234" });
-        Console.WriteLine(x);
-        var y = IBaseUdpModel.Deserialize<UdpAuthModel>(x);
-        Console.WriteLine(y);
+        Task transporterTask = _transport.Start();
+        Task stdinTask = ReadInputAsync();
+        
+        try
+        {
+            await Task.WhenAll(transporterTask, stdinTask);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"ERROR: {e}");
+        }
+        finally
+        {
+            await _transport.Disconnect();
+        }
     }
     
     private async Task ReadInputAsync()

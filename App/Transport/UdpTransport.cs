@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using App.Models;
 using App.Models.udp;
@@ -11,52 +12,76 @@ public class UdpTransport : ITransport
     private readonly int _port;
     private readonly CancellationToken _cancellationToken;
     private readonly UdpClient _client = new();
+    private readonly ICollection<IModelWithId> _pendingMessages = new List<IModelWithId>();
 
     private int messageIdSequence = 0;
     
     public event EventHandler<IBaseModel>? OnMessage;
+    private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
 
     public UdpTransport(string host, int port, CancellationToken cancellationToken)
     {
         _host = host;
         _port = port;
         _cancellationToken = cancellationToken;
+        OnMessageConfirmed += OnMessageConfirmedHandler;
     }
 
-    public Task Auth(AuthModel data)
+    public async Task Auth(AuthModel data)
     {
-        throw new NotImplementedException();
+        await Send(new UdpAuthModel
+        {
+            Username = data.Username,
+            DisplayName = data.DisplayName,
+            Secret = data.Secret
+        });
     }
 
-    public Task Join(JoinModel data)
+    public async Task Join(JoinModel data)
     {
-        throw new NotImplementedException();
+        await Send(new UdpJoinModel
+        {
+            DisplayName = data.DisplayName,
+            ChannelId = data.ChannelId
+        });
     }
 
-    public Task Message(MessageModel data)
+    public async Task Message(MessageModel data)
     {
-        throw new NotImplementedException();
+        await Send(new UdpMessageModel
+        {
+            DisplayName = data.DisplayName,
+            Content = data.Content,
+        });
     }
 
-    public Task Error(MessageModel data)
+    public async Task Error(MessageModel data)
     {
-        throw new NotImplementedException();
+        await Send(new UdpErrorModel
+        {
+            DisplayName = data.DisplayName,
+            Content = data.Content,
+        });
     }
 
-    public Task Reply(ReplyModel data)
+    public async Task Reply(ReplyModel data)
     {
-        throw new NotImplementedException();
+        await Send(new UdpReplyModel
+        {
+            Content = data.Content,
+            Status = data.Status,
+            RefMessageId = 1
+        });
     }
 
-    public Task Bye()
+    public async Task Bye()
     {
-        throw new NotImplementedException();
+        await Send(new UdpByeModel());
     }
 
     public async Task Start()
     {
-        _client.Connect(_host, _port);
-        Console.WriteLine("Connected sheeesh 🦞");
+        await Connect();
         
         while (!_cancellationToken.IsCancellationRequested)
         {
@@ -65,7 +90,19 @@ public class UdpTransport : ITransport
             
             Console.WriteLine($"[RECEIVED] {responseData}");
             
-            // OnMessage.Invoke(this, ParseMessage(responseData));
+            var parsedData = ParseMessage(responseData);
+            
+            if (parsedData == typeof(UdpConfirmModel))
+            {
+                OnMessageConfirmed?.Invoke(this, (UdpConfirmModel)parsedData);
+            }
+
+            if (parsedData == typeof(IModelWithId))
+            {
+                await Send(new UdpConfirmModel() { RefMessageId = ((IModelWithId)parsedData).Id });
+            }
+            
+            OnMessage?.Invoke(this, parsedData);
 
             await Task.Delay(100, _cancellationToken);
         }
@@ -77,51 +114,39 @@ public class UdpTransport : ITransport
         return Task.FromResult(0);
     }
 
-    private async Task Send(IBaseModel data)
+    private async Task Send(IBaseUdpModel data)
     {
-        var buffer = new byte[1024];
-
-        switch (data)
+        try 
         {
-           case UdpConfirmModel confirmModel:
-               buffer[0] = (byte)confirmModel.MessageType;
-               BitConverter.GetBytes(confirmModel.RefMessageId).CopyTo(buffer, 1);
-               break;
-           case UdpReplyModel replyModel:
-               buffer[0] = (byte)replyModel.UdpMessageType;
-               BitConverter.GetBytes(messageIdSequence++).CopyTo(buffer, 1);
-               buffer[3] = Convert.ToByte(replyModel.Status);
-               BitConverter.GetBytes(replyModel.RefMessageId).CopyTo(buffer, 4);
-               Encoding.UTF8.GetBytes(replyModel.Content).CopyTo(buffer, 6);
-               buffer[6 + replyModel.Content.Length + 1] = 0;
-               break;
-           case UdpAuthModel authModel:
-               buffer[0] = (byte)authModel.UdpMessageType;
-               BitConverter.GetBytes(messageIdSequence++).CopyTo(buffer, 1);
-               
-               Encoding.UTF8.GetBytes(authModel.Username).CopyTo(buffer, 1);
-               buffer[1 + authModel.Username.Length + 1] = 0;
-               
-               Encoding.UTF8.GetBytes(authModel.DisplayName).CopyTo(buffer, 1);
-               buffer[1 + authModel.DisplayName.Length + 1] = 0;
-               
-               Encoding.UTF8.GetBytes(authModel.Secret).CopyTo(buffer, 1);
-               buffer[1 + authModel.Secret.Length + 1] = 0;
-               break;
-           case UdpJoinModel joinModel:
-               buffer[0] = (byte)joinModel.MessageType;
-               BitConverter.GetBytes(messageIdSequence++).CopyTo(buffer, 1);
-               
-               Encoding.UTF8.GetBytes(joinModel.DisplayName).CopyTo(buffer, 1);
-               buffer[1 + joinModel.DisplayName.Length + 1] = 0;
-               break;
+            IPEndPoint endPoint = new(IPAddress.Parse("127.0.0.1"), 4567);
+            var buffer = IBaseUdpModel.Serialize(data);
+            await _client.SendAsync(buffer, endPoint: endPoint ,_cancellationToken);
         }
-        
-        await _client.SendAsync(buffer, _cancellationToken);
+        catch (Exception e)
+        {
+            Console.WriteLine("Failed to serialize data: " + e.Message);
+        }
     }
 
-    private IBaseModel ParseMessage(string data)
+    private IBaseUdpModel ParseMessage(string data)
     {
-        return null;
+        var buffer = Encoding.UTF8.GetBytes(data);
+        return IBaseUdpModel.Deserialize(buffer);
+    }
+    
+    private void OnMessageConfirmedHandler(object sender, UdpConfirmModel data)
+    {
+        var message = _pendingMessages.FirstOrDefault(m => m.Id == data.RefMessageId);
+        if (message is not null)
+        {
+            _pendingMessages.Remove(message);
+        }
+    }
+    
+    public async Task Connect()
+    {
+        // _client.Connect("localhost", 4567);
+        // _client.Connect(_host, _port);
+        Console.WriteLine("Connected sheeesh 🦞");
     }
 }

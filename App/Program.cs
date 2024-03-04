@@ -1,6 +1,8 @@
 ﻿using System.Net.Sockets;
 using System.Text;
 using App.Enums;
+using App.Models;
+using App.Models.udp;
 using App.Transport;
 using CommandLine;
 
@@ -18,9 +20,18 @@ static class Program
     public static async Task RunClient(Options opt)
     {
         var source = new CancellationTokenSource();
-        var transport = new TcpTransport(opt.Host, opt.Port, source.Token);
+        var transport = new UdpTransport(opt.Host, opt.Port, source.Token);
+        await transport.Connect();
         
-        var client = new ChatClient(transport, source);
-        await client.Start();
+        await transport.Auth(new AuthModel()
+        {
+            Username = "A",
+            DisplayName = "B",
+            Secret = "C"
+        });
+        // var transport = new TcpTransport(opt.Host, opt.Port, source.Token);
+
+        // var client = new ChatClient(transport, source);
+        // await client.Start();
     }
 } 

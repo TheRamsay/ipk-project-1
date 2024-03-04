@@ -3,10 +3,17 @@ using App.Enums;
 
 namespace App.Models.udp;
 
-public class UdpAuthModel: AuthModel, IBaseUdpModel
+public class UdpAuthModel: IBaseUdpModel, IModelWithId
 {
     public UdpMessageType UdpMessageType { get; set; } = UdpMessageType.Auth;
 
+    public short Id { get; set; }
+    
+    public string Username { get; set; }
+    
+    public string DisplayName { get; set; }
+
+    public string Secret { get; set; }
     public UdpAuthModel()
     {
         
