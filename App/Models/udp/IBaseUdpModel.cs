@@ -5,7 +5,7 @@ namespace App.Models.udp;
 
 public interface IBaseUdpModel: IBaseModel
 {
-    public static byte[] Serialize(UdpAuthModel model)
+    public static byte[] Serialize(IBaseUdpModel model)
     {
         var properties = model.GetType().GetProperties();
 
@@ -42,19 +42,15 @@ public interface IBaseUdpModel: IBaseModel
         return memoryStream.ToArray();
     }
     
-    public static IBaseModel Deserialize(byte[] data)
+    public static T Deserialize<T>(byte[] data) where T : IBaseUdpModel, new()
     {
+        T model = new T();
+        Type modelType = model.GetType();
+        
         using var memoryStream = new MemoryStream(data);
         using var binaryReader = new BinaryReader(memoryStream);
         
-        var model = new UdpAuthModel
-        {
-            Username = null,
-            DisplayName = null,
-            Secret = null
-        };
-        
-        var properties = model.GetType().GetProperties();
+        var properties = modelType.GetType().GetProperties();
 
         foreach (var property in properties)
         {

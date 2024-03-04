@@ -4,5 +4,5 @@ namespace App.Models.udp;
 
 public class UdpJoinModel: JoinModel
 {
-    public UdpMessageType MessageType { get; } = UdpMessageType.Join;
+    public UdpMessageType MessageType { get; set;  } = UdpMessageType.Join;
 }

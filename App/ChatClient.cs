@@ -25,10 +25,23 @@ public class ChatClient
     {
         // Task transporterTask = _transport.Start();
         // Task stdinTask = ReadInputAsync();
+        //
+        // try
+        // {
+        //     await Task.WhenAll(transporterTask, stdinTask);
+        // }
+        // catch (Exception e)
+        // {
+        //     Console.WriteLine($"ERROR: {e}");
+        // }
+        // finally
+        // {
+        //     await _transport.Disconnect();
+        // }
 
         var x = IBaseUdpModel.Serialize(new UdpAuthModel(){ Username = "Ramsay", DisplayName = "Gordon", Secret = "1234" });
         Console.WriteLine(x);
-        var y = IBaseUdpModel.Deserialize(x);
+        var y = IBaseUdpModel.Deserialize<UdpAuthModel>(x);
         Console.WriteLine(y);
     }
     
