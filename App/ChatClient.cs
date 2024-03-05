@@ -30,21 +30,25 @@ public class ChatClient
         
         try
         {
-            await Task.WhenAll(transporterTask, stdinTask);
+            var x = await Task.WhenAny(transporterTask, stdinTask);
+            Console.WriteLine(x);
+            await x;
         }
         catch (Exception e)
         {
-            Console.WriteLine($"ERROR: {e}");
+            Console.WriteLine($"START CHAT CLIENT LEVEL ERROR: {e}");
         }
         finally
         {
             await _transport.Disconnect();
+            await Task.Delay(1000);
+            await _cancellationTokenSource.CancelAsync();
         }
     }
     
     private async Task ReadInputAsync()
     {
-        while (_protocolState is not ProtocolState.End)
+        while (_protocolState is not ProtocolState.End || !_cancellationTokenSource.Token.IsCancellationRequested)
         {
             var line = Console.ReadLine();
 
@@ -78,6 +82,7 @@ public class ChatClient
                                 { Username = parts[1], Secret = parts[2], DisplayName = parts[3] }
                             );
 
+                            _displayName = parts[3];
                             _protocolState = ProtocolState.Auth;
                             break;
                         }
@@ -160,7 +165,6 @@ public class ChatClient
                 
                 Console.WriteLine($"Error from {errorModel.DisplayName}: {string.Join(" ", errorModel.Content)}");
                 
-                await _transport.Bye();
                 _protocolState = ProtocolState.End;
                 break;
             case ReplyModel replyModel:
@@ -196,6 +200,12 @@ public class ChatClient
                 throw new Exception("Invalid state");
             default:
                 throw new Exception("Unknown message type received.");
+        }
+        
+        if (_protocolState == ProtocolState.End)
+        {
+            await _transport.Disconnect();
+            await _cancellationTokenSource.CancelAsync();
         }
     }
 }

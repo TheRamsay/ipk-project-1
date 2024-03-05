@@ -46,11 +46,7 @@ public class TcpTransport : ITransport
     public async Task Disconnect()
     {
         await Bye();
-        if (_stream is not null)
-        {
-            await _stream.DisposeAsync();
-            _client.Dispose();
-        }
+        _client.Close();
     }
 
     public async Task Auth(AuthModel data)
@@ -102,7 +98,7 @@ public class TcpTransport : ITransport
                 { Username = userId, Secret = secret, DisplayName = dName },
             ["MSG", "FROM", var dName, "IS", .. var content] => new MessageModel()
                 { DisplayName = dName, Content = string.Join(" ", content) },
-            ["ERR", "FROM", var dName, "IS", .. var content] => new MessageModel()
+            ["ERR", "FROM", var dName, "IS", .. var content] => new ErrorModel()
                 { DisplayName = dName, Content = string.Join(" ", content) },
             ["REPLY", var status, "IS", .. var content] => new ReplyModel()
                 { Status = status == "OK", Content = string.Join(" ", content) },

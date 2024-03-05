@@ -20,18 +20,25 @@ static class Program
     public static async Task RunClient(Options opt)
     {
         var source = new CancellationTokenSource();
-        var transport = new UdpTransport(opt.Host, opt.Port, source.Token);
-        await transport.Connect();
+        // var transport = new UdpTransport(opt.Host, opt.Port, source.Token);
+        // await transport.Connect();
+        //
+        // await transport.Auth(new AuthModel()
+        // {
+        //     Username = "A",
+        //     DisplayName = "B",
+        //     Secret = "C"
+        // });
+        var transport = new TcpTransport(opt.Host, opt.Port, source.Token);
         
-        await transport.Auth(new AuthModel()
+        var client = new ChatClient(transport, source);
+        try
         {
-            Username = "A",
-            DisplayName = "B",
-            Secret = "C"
-        });
-        // var transport = new TcpTransport(opt.Host, opt.Port, source.Token);
-
-        // var client = new ChatClient(transport, source);
-        // await client.Start();
+            await client.Start();
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"TOP LEVEL ERROR: {e}");
+        }
     }
 } 
