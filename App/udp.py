@@ -1,51 +1,46 @@
-﻿import socketserver
+﻿import socket
+import struct
 
+class UdpServer:
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
 
-HOST = 'localhost'
-PORT = 4567 
-messages = []
+    def run(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
+            udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            udp_socket.bind((self.host, self.port))
+            print(f"UDP server listening on 😳 {self.host}:{self.port}")
 
+            while True:
+                print("Waiting for message...")
+                data, client_address = udp_socket.recvfrom(100)  # Adjust buffer size as needed
+                print(f"Received message from {client_address}: {data}")
+                decoded_message = self.decode_message(data)
+                print(f"Received message from {client_address}: {decoded_message}")
 
-class Message():
-    msg1 = None
-    msg2 = None
-    msg3 = None
+    def decode_message(self, data):
+        message_type = struct.unpack('!B', data[0:1])[0]
 
-    def encoded(self):
-        return self.msg1 + '#' + self.msg2 + '#' + self.msg3
+        if message_type == 0x00:  # CONFIRM
+            ref_message_id = struct.unpack('!H', data[1:3])[0]
+            return f"CONFIRM - Ref_MessageID: {ref_message_id}"
 
-    def checksum(self):
-        return len(self.msg1 + self.msg2 + self.msg3)
+        elif message_type == 0x01:  # REPLY
+            message_id, result, ref_message_id, message_contents = struct.unpack('!HBB', data[1:8])
+            message_contents = message_contents.rstrip(b'\x00').decode('utf-8')
+            return f"REPLY - MessageID: {message_id}, Result: {result}, Ref_MessageID: {ref_message_id}, MessageContents: {message_contents}"
 
+        elif message_type == 0x02:  # AUTH
+            message_id, username, display_name, secret = struct.unpack('!H50s50s50s', data[1:104])
+            username = username.rstrip(b'\x00').decode('utf-8')
+            display_name = display_name.rstrip(b'\x00').decode('utf-8')
+            secret = secret.rstrip(b'\x00').decode('utf-8')
+            return f"AUTH - MessageID: {message_id}, Username: {username}, DisplayName: {display_name}, Secret: {secret}"
 
-class MyUDPHandler(socketserver.DatagramRequestHandler):
+        else:
+            return "Unknown message type"
 
-    def handle(self):
-        print('listening...')
-
-        if self.server.data.msg1 is None:
-            print('received 1')
-            self.server.data.msg1 = self.request[0].decode()
-        elif self.server.data.msg2 is None:
-            print('received 2')
-            self.server.data.msg2 = self.request[0].decode()
-        elif self.server.data.msg3 is None:
-            print('received 3')
-            self.server.data.msg3 = self.request[0].decode()
-
-            reply = self.server.data.encoded()
-            checksum = str(self.server.data.checksum())
-
-            print('sending reply:', reply)
-            print('sending checksum:', checksum)
-
-            self.request[1].sendto(reply.encode(), self.client_address)
-            self.request[1].sendto(checksum.encode(), self.client_address)
-
-            self.server.data = Message()
-
-
-
-server = socketserver.UDPServer((HOST, PORT), MyUDPHandler)
-server.data = Message()
-server.serve_forever()
+if __name__ == "__main__":
+    udp_server = UdpServer("127.0.0.1", 4567)  # Replace with your server IP and port
+    udp_server.run()

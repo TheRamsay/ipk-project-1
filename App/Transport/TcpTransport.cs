@@ -26,7 +26,7 @@ public class TcpTransport : ITransport
 
     public async Task Start()
     {
-        await _client.ConnectAsync(_host, _port, _cancellationToken);
+        await _client.ConnectAsync(_host, _port);
         _stream = _client.GetStream();
         
         _stream.ReadTimeout = 20000;
@@ -45,7 +45,7 @@ public class TcpTransport : ITransport
 
     public async Task Disconnect()
     {
-        await Bye();
+        await Bye(); 
         _client.Close();
     }
 
@@ -53,7 +53,7 @@ public class TcpTransport : ITransport
     {
         await Send($"AUTH {data.Username} AS {data.DisplayName} USING {data.Secret}");
     }
-
+    
     public async Task Join(JoinModel data)
     {
         await Send($"JOIN {data.ChannelId} AS {data.DisplayName}");
@@ -86,7 +86,7 @@ public class TcpTransport : ITransport
         var bytes = Encoding.UTF8.GetBytes(message);
         if (_stream != null)
         {
-            await _stream.WriteAsync(bytes, _cancellationToken);
+            await _stream.WriteAsync(bytes);
         }
     }
 

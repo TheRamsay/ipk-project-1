@@ -11,7 +11,7 @@ public class UdpTransport : ITransport
     private readonly string _host;
     private readonly int _port;
     private readonly CancellationToken _cancellationToken;
-    private readonly UdpClient _client = new();
+    private readonly UdpClient _client;
     private readonly ICollection<IModelWithId> _pendingMessages = new List<IModelWithId>();
 
     private int messageIdSequence = 0;
@@ -25,6 +25,24 @@ public class UdpTransport : ITransport
         _port = port;
         _cancellationToken = cancellationToken;
         OnMessageConfirmed += OnMessageConfirmedHandler;
+        _client = new();
+        _client.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
+
+        Console.WriteLine("fewewfwe");
+            
+        // _client = new(new IPEndPoint(IPAddress.Parse("127.0.0.1"), _port));
+    }
+
+    public async Task Connect()
+    {
+        // _client.Connect(_host, _port);
+        Console.WriteLine("Connected sheeesh 🦞");
+    }
+    
+    public Task Disconnect()
+    {
+        _client.Close();
+        return Task.FromResult(0);
     }
 
     public async Task Auth(AuthModel data)
@@ -85,7 +103,12 @@ public class UdpTransport : ITransport
         
         while (!_cancellationToken.IsCancellationRequested)
         {
-            var receiveBuffer = (await _client.ReceiveAsync(_cancellationToken)).Buffer;
+            // _client.Client.Bind(new IPEndPoint(IPAddress.Any, 4567));
+            // var ip = new IPEndPoint(IPAddress.Parse("127.0.0.1"), _port);
+            
+            var response = await _client.ReceiveAsync();
+            var from = response.RemoteEndPoint;
+            var receiveBuffer = response.Buffer;
             var responseData = Encoding.UTF8.GetString(receiveBuffer);
             
             Console.WriteLine($"[RECEIVED] {responseData}");
@@ -107,20 +130,14 @@ public class UdpTransport : ITransport
             await Task.Delay(100, _cancellationToken);
         }
     }
-
-    public Task Disconnect()
-    {
-        _client.Close();
-        return Task.FromResult(0);
-    }
-
+    
     private async Task Send(IBaseUdpModel data)
     {
-        try 
+        try
         {
-            IPEndPoint endPoint = new(IPAddress.Parse("127.0.0.1"), 1111);
+            var ip = new IPEndPoint(IPAddress.Parse("127.0.0.1"), _port);
             var buffer = IBaseUdpModel.Serialize(data);
-            await _client.SendAsync(buffer, endPoint: endPoint ,_cancellationToken);
+            await _client.SendAsync(buffer, buffer.Length, ip);
         }
         catch (Exception e)
         {
@@ -141,12 +158,5 @@ public class UdpTransport : ITransport
         {
             _pendingMessages.Remove(message);
         }
-    }
-    
-    public async Task Connect()
-    {
-        // _client.Connect("localhost", 4567);
-        // _client.Connect(_host, _port);
-        Console.WriteLine("Connected sheeesh 🦞");
     }
 }

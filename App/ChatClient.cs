@@ -12,7 +12,7 @@ public class ChatClient
     
     private ProtocolState _protocolState;
     private string _displayName = String.Empty;
-
+    
     public ChatClient(ITransport transport, CancellationTokenSource cancellationTokenSource)
     {
         _cancellationTokenSource = cancellationTokenSource;
@@ -25,23 +25,20 @@ public class ChatClient
 
     public async Task Start()
     {
-        Task transporterTask = _transport.Start();
+        Task transportTask = _transport.Start();
         Task stdinTask = ReadInputAsync();
         
         try
         {
-            var x = await Task.WhenAny(transporterTask, stdinTask);
-            Console.WriteLine(x);
-            await x;
+            await await Task.WhenAny(transportTask, stdinTask);
         }
         catch (Exception e)
         {
-            Console.WriteLine($"START CHAT CLIENT LEVEL ERROR: {e}");
+            Console.WriteLine($"ERROR: {e}");
         }
         finally
         {
             await _transport.Disconnect();
-            await Task.Delay(1000);
             await _cancellationTokenSource.CancelAsync();
         }
     }
@@ -172,7 +169,7 @@ public class ChatClient
                 {
                     throw new Exception("Invalid state");
                 }
-            
+                
                 if (replyModel.Status)
                 {
                     
