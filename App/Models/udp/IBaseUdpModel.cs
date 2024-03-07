@@ -5,6 +5,7 @@ namespace App.Models.udp;
 
 public interface IBaseUdpModel: IBaseModel
 {
+    public UdpMessageType MessageType { get; set; }
     public static byte[] Serialize(IBaseUdpModel model)
     {
         var properties = model.GetType().GetProperties();

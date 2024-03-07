@@ -12,12 +12,15 @@ public class UdpTransport : ITransport
     private readonly int _port;
     private readonly CancellationToken _cancellationToken;
     private readonly UdpClient _client = new();
-    private readonly ICollection<IModelWithId> _pendingMessages = new List<IModelWithId>();
 
-    private int messageIdSequence = 0;
-    
+    private readonly ICollection<(IModelWithId message, int retries)>
+        _pendingMessages = new List<(IModelWithId, int)>();
+
+    private short messageIdSequence = 0;
+
     public event EventHandler<IBaseModel>? OnMessage;
     private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
+    public event EventHandler<IModelWithId> OnTimeoutExpired;
 
     public UdpTransport(string host, int port, CancellationToken cancellationToken)
     {
@@ -32,7 +35,7 @@ public class UdpTransport : ITransport
         _client.Connect(_host, _port);
         Console.WriteLine("Connected sheeesh 🦞");
     }
-    
+
     public Task Disconnect()
     {
         _client.Close();
@@ -43,6 +46,7 @@ public class UdpTransport : ITransport
     {
         await Send(new UdpAuthModel
         {
+            Id = messageIdSequence++,
             Username = data.Username,
             DisplayName = data.DisplayName,
             Secret = data.Secret
@@ -53,6 +57,7 @@ public class UdpTransport : ITransport
     {
         await Send(new UdpJoinModel
         {
+            Id = messageIdSequence++,
             DisplayName = data.DisplayName,
             ChannelId = data.ChannelId
         });
@@ -62,6 +67,7 @@ public class UdpTransport : ITransport
     {
         await Send(new UdpMessageModel
         {
+            Id = messageIdSequence++,
             DisplayName = data.DisplayName,
             Content = data.Content,
         });
@@ -71,6 +77,7 @@ public class UdpTransport : ITransport
     {
         await Send(new UdpErrorModel
         {
+            Id = messageIdSequence++,
             DisplayName = data.DisplayName,
             Content = data.Content,
         });
@@ -80,6 +87,7 @@ public class UdpTransport : ITransport
     {
         await Send(new UdpReplyModel
         {
+            Id = messageIdSequence++,
             Content = data.Content,
             Status = data.Status,
             RefMessageId = 1
@@ -94,41 +102,69 @@ public class UdpTransport : ITransport
     public async Task Start()
     {
         await Connect();
-        
+
         while (!_cancellationToken.IsCancellationRequested)
         {
             var response = await _client.ReceiveAsync();
             var from = response.RemoteEndPoint;
             var receiveBuffer = response.Buffer;
             var parsedData = ParseMessage(receiveBuffer);
-            
-            Console.WriteLine($"[RECEIVED FROM {from}] {((UdpReplyModel)parsedData).Content}");
-            if (parsedData == typeof(UdpConfirmModel))
+
+            if (parsedData is UdpConfirmModel confirmModel)
             {
-                OnMessageConfirmed?.Invoke(this, (UdpConfirmModel)parsedData);
+                OnMessageConfirmed?.Invoke(this, confirmModel);
             }
 
-            if (parsedData == typeof(IModelWithId))
+            if (parsedData is IModelWithId modelWithId)
             {
-                await Send(new UdpConfirmModel() { RefMessageId = ((IModelWithId)parsedData).Id });
-            }
-            
-            OnMessage?.Invoke(this, parsedData);
+                await Send(new UdpConfirmModel() { RefMessageId = modelWithId.Id });
 
-            await Task.Delay(100, _cancellationToken);
+                switch (parsedData)
+                {
+                    case UdpAuthModel data:
+                        OnMessage?.Invoke(this,
+                            new AuthModel()
+                                { DisplayName = data.DisplayName, Secret = data.Secret, Username = data.Username });
+                        break;
+                    case UdpJoinModel data:
+                        OnMessage?.Invoke(this,
+                            new JoinModel() { ChannelId = data.ChannelId, DisplayName = data.DisplayName });
+                        break;
+                    case UdpMessageModel data:
+                        OnMessage?.Invoke(this,
+                            new MessageModel() { Content = data.Content, DisplayName = data.DisplayName });
+                        break;
+                    case UdpErrorModel data:
+                        OnMessage?.Invoke(this,
+                            new MessageModel() { Content = data.Content, DisplayName = data.DisplayName });
+                        break;
+                    case UdpReplyModel data:
+                        OnMessage?.Invoke(this, new ReplyModel() { Content = data.Content, Status = data.Status });
+                        break;
+                    case UdpByeModel _:
+                        OnMessage?.Invoke(this, new ByeModel());
+                        break;
+                    default:
+                        throw new Exception("Invalid state");
+                }
+            }
         }
     }
-    
+
     private async Task Send(IBaseUdpModel data)
     {
-        try
+        var buffer = IBaseUdpModel.Serialize(data);
+        await _client.SendAsync(buffer);
+
+        if (data is IModelWithId modelWithId)
         {
-            var buffer = IBaseUdpModel.Serialize(data);
-            await _client.SendAsync(buffer);
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine("Failed to serialize data: " + e.Message);
+            _pendingMessages.Add((modelWithId, 0));
+
+            Task.Run(async () =>
+            {
+                await Task.Delay(250);
+                OnTimeoutExpired.Invoke(this, modelWithId);
+            });
         }
     }
 
@@ -136,13 +172,31 @@ public class UdpTransport : ITransport
     {
         return IBaseUdpModel.Deserialize(data);
     }
-    
+
     private void OnMessageConfirmedHandler(object sender, UdpConfirmModel data)
     {
-        var message = _pendingMessages.FirstOrDefault(m => m.Id == data.RefMessageId);
+        var (message, retries) = _pendingMessages.FirstOrDefault(i => i.message.Id == data.RefMessageId);
         if (message is not null)
         {
-            _pendingMessages.Remove(message);
+            _pendingMessages.Remove((message, retries));
+        }
+    }
+
+    private async void OnTimeoutExpiredHandler(object sender, IModelWithId data)
+    {
+        var (message, retries) = _pendingMessages.FirstOrDefault((i) => i.message.Id == data.Id);
+        if (message is not null)
+        {
+            if (retries < 3)
+            {
+                _pendingMessages.Remove((message, retries));
+                _pendingMessages.Add((message, retries + 1));
+                await Send((IBaseUdpModel)message);
+            }
+            else
+            {
+                throw new Exception("Max retries reached, message not delivered");
+            }
         }
     }
 }

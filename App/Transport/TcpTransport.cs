@@ -35,11 +35,9 @@ public class TcpTransport : ITransport
         while (!_cancellationToken.IsCancellationRequested)
         {
             var receiveBuffer = new byte[2048];
-            var length = await _stream.ReadAsync(receiveBuffer, 0, receiveBuffer.Length);
-            var responseData = Encoding.UTF8.GetString(receiveBuffer, 0, length);
+            await _stream.ReadAsync(receiveBuffer);
+            var responseData = Encoding.UTF8.GetString(receiveBuffer);
             OnMessage.Invoke(this, ParseMessage(responseData));
-
-            await Task.Delay(100, _cancellationToken);
         }
     }
 
