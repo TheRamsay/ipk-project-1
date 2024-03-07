@@ -99,6 +99,9 @@ public interface IBaseUdpModel: IBaseModel
             else if (propertyType == typeof(short))
             {
                 property.SetValue(model, binaryReader.ReadInt16());
+            } else if (propertyType == typeof(bool))
+            {
+                property.SetValue(model, binaryReader.ReadBoolean());
             }
         }
 

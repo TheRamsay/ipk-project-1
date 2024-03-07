@@ -11,32 +11,11 @@ namespace App;
 
 static class Program
 {
-    static async Task Main(string[] args)
+    static void Main(string[] args)
     {
-        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
-        socket.ReceiveTimeout = 1000;
-        
-        var ep = new IPEndPoint(IPAddress.Parse("127.0.0.1"), 4567);
-        
-        while (true)
-        {
-            var message = Encoding.UTF8.GetBytes("Hello, World!");
-            await socket.SendToAsync(message, SocketFlags.None, ep);
-            Console.WriteLine("Sent message");
-            
-            Console.WriteLine("Receiving message");
-            var buffer = new byte[1024];
-            var s = SocketFlags.None;
-            var received = socket.ReceiveMessageFrom(buffer, ref s, ref ep);
-            var receivedMessage = Encoding.UTF8.GetString(buffer, 0, received.ReceivedBytes);
-            
-            Console.WriteLine("Received a message", receivedMessage);
-        }
-        //
-        // new Parser(with => with.CaseInsensitiveEnumValues = true)
-        //     .ParseArguments<Options>(args)
-        //     .WithParsed(o => RunClient(o).Wait());
+        new Parser(with => with.CaseInsensitiveEnumValues = true)
+            .ParseArguments<Options>(args)
+            .WithParsed(o => RunClient(o).Wait());
     }
     
     public static async Task RunClient(Options opt)

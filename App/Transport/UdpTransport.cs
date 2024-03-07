@@ -11,7 +11,7 @@ public class UdpTransport : ITransport
     private readonly string _host;
     private readonly int _port;
     private readonly CancellationToken _cancellationToken;
-    private readonly UdpClient _client;
+    private readonly UdpClient _client = new();
     private readonly ICollection<IModelWithId> _pendingMessages = new List<IModelWithId>();
 
     private int messageIdSequence = 0;
@@ -25,17 +25,11 @@ public class UdpTransport : ITransport
         _port = port;
         _cancellationToken = cancellationToken;
         OnMessageConfirmed += OnMessageConfirmedHandler;
-        _client = new();
-        _client.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
-
-        Console.WriteLine("fewewfwe");
-            
-        // _client = new(new IPEndPoint(IPAddress.Parse("127.0.0.1"), _port));
     }
 
     public async Task Connect()
     {
-        // _client.Connect(_host, _port);
+        _client.Connect(_host, _port);
         Console.WriteLine("Connected sheeesh 🦞");
     }
     
@@ -103,18 +97,12 @@ public class UdpTransport : ITransport
         
         while (!_cancellationToken.IsCancellationRequested)
         {
-            // _client.Client.Bind(new IPEndPoint(IPAddress.Any, 4567));
-            // var ip = new IPEndPoint(IPAddress.Parse("127.0.0.1"), _port);
-            
             var response = await _client.ReceiveAsync();
             var from = response.RemoteEndPoint;
             var receiveBuffer = response.Buffer;
-            var responseData = Encoding.UTF8.GetString(receiveBuffer);
+            var parsedData = ParseMessage(receiveBuffer);
             
-            Console.WriteLine($"[RECEIVED] {responseData}");
-            
-            var parsedData = ParseMessage(responseData);
-            
+            Console.WriteLine($"[RECEIVED FROM {from}] {((UdpReplyModel)parsedData).Content}");
             if (parsedData == typeof(UdpConfirmModel))
             {
                 OnMessageConfirmed?.Invoke(this, (UdpConfirmModel)parsedData);
@@ -135,9 +123,8 @@ public class UdpTransport : ITransport
     {
         try
         {
-            var ip = new IPEndPoint(IPAddress.Parse("127.0.0.1"), _port);
             var buffer = IBaseUdpModel.Serialize(data);
-            await _client.SendAsync(buffer, buffer.Length, ip);
+            await _client.SendAsync(buffer);
         }
         catch (Exception e)
         {
@@ -145,10 +132,9 @@ public class UdpTransport : ITransport
         }
     }
 
-    private IBaseUdpModel ParseMessage(string data)
+    private IBaseUdpModel ParseMessage(byte[] data)
     {
-        var buffer = Encoding.UTF8.GetBytes(data);
-        return IBaseUdpModel.Deserialize(buffer);
+        return IBaseUdpModel.Deserialize(data);
     }
     
     private void OnMessageConfirmedHandler(object sender, UdpConfirmModel data)
