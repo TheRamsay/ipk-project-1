@@ -1,6 +1,8 @@
 ﻿import socket
 import struct
 from dataclasses import dataclass
+import time
+import asyncio
 
 @dataclass
 class AuthMessage:
@@ -54,8 +56,12 @@ class UdpServer:
         self.port = port
         self.socket = None
         self.msg_id = 0
+        self.processed_messages: set[int] = set()
+        self.pending_messages: dict[int, int] = dict()
 
     def run(self):
+        self.loop = asyncio.get_event_loop()
+
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
             udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             udp_socket.bind((self.host, self.port))
@@ -69,8 +75,21 @@ class UdpServer:
                 print(f"Received message from {client_address}: {decoded_message}")
 
                 if not isinstance(decoded_message, ConfirmMessage):
+                    if decoded_message.message_id == 0:
+                        print("Sleeping for 0.6 seconds")
+                        time.sleep(0.5)
+
                     self.confirm_message(decoded_message.message_id, client_address)
+
+                    if decoded_message.message_id in self.processed_messages:
+                        continue
+
+                    self.processed_messages.add(decoded_message.message_id)
                     print("Sent confirmation")
+
+                if isinstance(decoded_message, ConfirmMessage):
+                    if decoded_message.ref_message_id in self.pending_messages:
+                        del self.pending_messages[decoded_message.ref_message_id]
 
                 if isinstance(decoded_message, AuthMessage):
                     msg = f"Welcome to the chat server {decoded_message.display_name}!"
@@ -140,9 +159,30 @@ class UdpServer:
     def send_message(self, data, client_address):
         self.socket.sendto(data, client_address)
 
+        if data[0] != 0x00:
+            if (msg_id := struct.unpack('!H', data[1:3])[0]) not in self.pending_messages:
+                self.pending_messages[msg_id] = 0
+
+            self.loop.create_task(self.timeout_expired(data, client_address))
+
     def confirm_message(self, ref_message_id, client_address):
         data = struct.pack('!B H', 0x00, ref_message_id)
         self.send_message(data, client_address)
+
+    async def timeout_expired(self, data, client_address):
+        await asyncio.sleep(0.250)
+
+        msg_id = struct.unpack('!H', data[1:3])[0]
+
+        if msg_id in self.pending_messages:
+            await self.send_message(data, client_address)
+            self.pending_messages[msg_id] += 1
+
+            if self.pending_messages[msg_id] > 3:
+                raise Exception("Message could not be delivered.")
+        else:
+            print("Message was delivered successfully")
+
 
 if __name__ == "__main__":
     udp_server = UdpServer("0.0.0.0", 4567)  # Replace with your server IP and port
