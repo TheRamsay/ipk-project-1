@@ -8,11 +8,10 @@ namespace App.Transport;
 
 public class UdpTransport : ITransport
 {
-    private readonly string _host;
-    private readonly int _port;
     private readonly CancellationToken _cancellationToken;
     private readonly UdpClient _client = new();
-
+    private readonly Options _options;
+    
     private readonly Dictionary<short, int> _pendingMessages = new();
     private readonly HashSet<short> _processedMessages = new();
 
@@ -22,18 +21,17 @@ public class UdpTransport : ITransport
     private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
     public event EventHandler<IModelWithId> OnTimeoutExpired;
 
-    public UdpTransport(string host, int port, CancellationToken cancellationToken)
+    public UdpTransport(Options options, CancellationToken cancellationToken)
     {
-        _host = host;
-        _port = port;
         _cancellationToken = cancellationToken;
+        _options = options;
         OnMessageConfirmed += OnMessageConfirmedHandler;
         OnTimeoutExpired += OnTimeoutExpiredHandler;
     }
 
     public async Task Connect()
     {
-        _client.Connect(_host, _port);
+        _client.Connect(_options.Host, _options.Port);
         Console.WriteLine("Connected sheeesh 🦞");
     }
 
@@ -177,7 +175,7 @@ public class UdpTransport : ITransport
             Task.Run(async () =>
             {
                 Console.WriteLine($"Created timeout for message {modelWithId.Id}");
-                await Task.Delay(250);
+                await Task.Delay(_options.Timeout);
                 Console.WriteLine($"Timeout for message {modelWithId.Id} has expired");
                 OnTimeoutExpired.Invoke(this, modelWithId);
             });
@@ -202,7 +200,7 @@ public class UdpTransport : ITransport
     {
         if (_pendingMessages.TryGetValue(data.Id, out var retries))
         {
-            if (retries < 3)
+            if (retries < _options.Rentransmissions)
             {
                 _pendingMessages[data.Id] = retries + 1;
                 Console.WriteLine($"Resending message {data.Id}");

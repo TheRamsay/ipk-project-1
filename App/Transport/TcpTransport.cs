@@ -8,25 +8,22 @@ namespace App.Transport;
 
 public class TcpTransport : ITransport
 {
-    private readonly string _host;
-    private readonly int _port;
     private readonly CancellationToken _cancellationToken;
     private readonly TcpClient _client = new();
+    private readonly Options _options;
 
     private NetworkStream? _stream;
 
     public event EventHandler<IBaseModel> OnMessage;
 
-    public TcpTransport(string host, int port, CancellationToken cancellationToken)
+    public TcpTransport(Options options, CancellationToken cancellationToken)
     {
-        _host = host;
-        _port = port;
         _cancellationToken = cancellationToken;
     }
 
     public async Task Start()
     {
-        await _client.ConnectAsync(_host, _port);
+        await _client.ConnectAsync(_options.Host, _options.Port);
         _stream = _client.GetStream();
         
         _stream.ReadTimeout = 20000;

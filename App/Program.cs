@@ -25,11 +25,11 @@ static class Program
         ITransport transport;
         if (opt.Protocol == TransportProtocol.Udp)
         {
-            transport = new UdpTransport(opt.Host, opt.Port, source.Token);
+            transport = new UdpTransport(opt, source.Token);
         }
         else
         {
-           transport = new TcpTransport(opt.Host, opt.Port, source.Token);
+           transport = new TcpTransport(opt, source.Token);
         }
         
         var client = new ChatClient(transport, source);
