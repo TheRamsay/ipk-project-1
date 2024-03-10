@@ -12,7 +12,10 @@ public class ChatClient
     
     private ProtocolState _protocolState;
     private string _displayName = String.Empty;
-    
+
+    private ReplyLock _authLock = new ReplyLock("Waiting for a auth confirmation from the server.");
+    private ReplyLock _joinLock = new ReplyLock("Waiting a join confirmation from the server.");
+
     public ChatClient(ITransport transport, CancellationTokenSource cancellationTokenSource)
     {
         _cancellationTokenSource = cancellationTokenSource;
@@ -64,6 +67,24 @@ public class ChatClient
                 
                 throw new Exception("Invalid state");
             }
+
+            if (line.Length == 0)
+            {
+                throw new Exception("Messages can't be empty.");
+            }
+
+            while (_authLock.IsLocked || _joinLock.IsLocked)
+            {
+                if (_authLock.IsLocked)
+                {
+                    Console.WriteLine(_authLock.InfoMessage);
+                }
+                else
+                {
+                    Console.WriteLine(_joinLock.InfoMessage);
+                }
+                await Task.Delay(100);
+            }
             
             if (line.StartsWith('/'))
             {
@@ -79,6 +100,7 @@ public class ChatClient
                                 { Username = parts[1], Secret = parts[2], DisplayName = parts[3] }
                             );
 
+                            _authLock.Lock();
                             _displayName = parts[3];
                             _protocolState = ProtocolState.Auth;
                             break;
@@ -89,6 +111,7 @@ public class ChatClient
                         if (_protocolState == ProtocolState.Open)
                         {
                             await _transport.Join(new JoinModel() { ChannelId = parts[1], DisplayName = _displayName});
+                            _joinLock.Lock();
                             break;
                         }
                         
@@ -174,6 +197,15 @@ public class ChatClient
                 {
                     
                     Console.WriteLine($"Success: {replyModel.Content}");
+                    if (_protocolState is ProtocolState.Auth)
+                    {
+                        _authLock.Unlock();
+                    }
+                    else
+                    {
+                        _joinLock.Unlock();
+                    }
+                    
                     _protocolState = ProtocolState.Open;
                 }
                 else
