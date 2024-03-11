@@ -28,7 +28,7 @@ public class ChatClient
 
     public async Task Start()
     {
-        Task transportTask = _transport.Start();
+        Task transportTask = _transport.Start(_protocolState);
         Task stdinTask = ReadInputAsync();
         
         try

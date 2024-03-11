@@ -54,7 +54,8 @@ class UdpServer:
     def __init__(self, host, port):
         self.host = host
         self.port = port
-        self.socket = None
+        self.auth_socket = None
+        self.msg_socket = None
         self.msg_id = 0
         self.processed_messages: set[int] = set()
         self.pending_messages: dict[int, int] = dict()
@@ -62,61 +63,63 @@ class UdpServer:
     def run(self):
         self.loop = asyncio.get_event_loop()
 
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
-            udp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            udp_socket.bind((self.host, self.port))
-            self.socket = udp_socket
-            print(f"UDP server listening on 😳 {self.host}:{self.port}")
+        self.auth_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.auth_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.auth_socket.bind((self.host, self.port))
 
-            while True:
-                print("Waiting for message...")
-                data, client_address = udp_socket.recvfrom(100)  # Adjust buffer size as needed
-                decoded_message = self.decode_message(data)
-                print(f"Received message from {client_address}: {decoded_message}")
+        self.msg_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.msg_socket.bind((self.host, 4568))
+        print(f"UDP server listening on 😳 {self.host}:{self.port}")
 
-                if not isinstance(decoded_message, ConfirmMessage):
-                    if decoded_message.message_id == 0:
-                        print("Sleeping for 0.6 seconds")
-                        time.sleep(1.4)
+        while True:
+            print("Waiting for message...")
+            data, client_address = self.auth_socket.recvfrom(100)  # Adjust buffer size as needed
+            decoded_message = self.decode_message(data)
+            print(f"Received message from {client_address}: {decoded_message}")
 
-                    self.confirm_message(decoded_message.message_id, client_address)
+            if not isinstance(decoded_message, ConfirmMessage):
+                # if decoded_message.message_id == 0:
+                    # print("Sleeping for 0.6 seconds")
+                    # time.sleep(1.4)
 
-                    if decoded_message.message_id in self.processed_messages:
-                        continue
+                self.confirm_message(decoded_message.message_id, client_address)
 
-                    self.processed_messages.add(decoded_message.message_id)
-                    print("Sent confirmation")
+                if decoded_message.message_id in self.processed_messages:
+                    continue
 
-                if isinstance(decoded_message, ConfirmMessage):
-                    if decoded_message.ref_message_id in self.pending_messages:
-                        del self.pending_messages[decoded_message.ref_message_id]
+                self.processed_messages.add(decoded_message.message_id)
+                print("Sent confirmation")
 
-                if isinstance(decoded_message, AuthMessage):
-                    msg = f"Welcome to the chat server {decoded_message.display_name}!"
-                    fmt = f"!B H B H {len(msg)}s B"
+            if isinstance(decoded_message, ConfirmMessage):
+                if decoded_message.ref_message_id in self.pending_messages:
+                    del self.pending_messages[decoded_message.ref_message_id]
 
-                    data = struct.pack(fmt, 0x01, self.msg_id, 0x01, decoded_message.message_id, bytes(msg, "ascii") , 0x00)
-                    self.send_message(data, client_address)
-                    self.msg_id += 1
+            if isinstance(decoded_message, AuthMessage):
+                msg = f"Welcome to the chat server {decoded_message.display_name}!"
+                fmt = f"!B H B H {len(msg)}s B"
 
-                elif isinstance(decoded_message, JoinMessage):
-                    msg = f"Wellcome to room {decoded_message.channel}"                    
-                    fmt = f"!B H B H {len(msg)}s B"
-                    data = struct.pack(fmt, 0x01, self.msg_id, 0x01, decoded_message.message_id, bytes(msg, "ascii") , 0x00)
-                    self.send_message(data, client_address)
-                    self.msg_id += 1
+                data = struct.pack(fmt, 0x01, self.msg_id, 0x01, decoded_message.message_id, bytes(msg, "ascii") , 0x00)
+                self.send_message(data, client_address)
+                self.msg_id += 1
 
-                elif isinstance(decoded_message, MessageMessage):
-                    msg = decoded_message.content
-                    display_name = decoded_message.display_name
-                    fmt = f"!B H {len(display_name)}s B {len(msg)}s B"
-                    data = struct.pack(fmt, 0x04, self.msg_id, bytes(display_name, "ascii"), 0x00, bytes(msg, "ascii"), 0x00)
-                    self.send_message(data, client_address)
-                    self.msg_id += 1
+            elif isinstance(decoded_message, JoinMessage):
+                msg = f"Wellcome to room {decoded_message.channel}"                    
+                fmt = f"!B H B H {len(msg)}s B"
+                data = struct.pack(fmt, 0x01, self.msg_id, 0x01, decoded_message.message_id, bytes(msg, "ascii") , 0x00)
+                self.send_message(data, client_address)
+                self.msg_id += 1
 
-                elif isinstance(decoded_message, ByeMessage):
-                    udp_socket.close()
-                    return
+            elif isinstance(decoded_message, MessageMessage):
+                msg = decoded_message.content
+                display_name = decoded_message.display_name
+                fmt = f"!B H {len(display_name)}s B {len(msg)}s B"
+                data = struct.pack(fmt, 0x04, self.msg_id, bytes(display_name, "ascii"), 0x00, bytes(msg, "ascii"), 0x00)
+                self.send_message(data, client_address)
+                self.msg_id += 1
+
+            elif isinstance(decoded_message, ByeMessage):
+                self.auth_socket.close()
+                return
 
     def decode_message(self, data):
         message_type = struct.unpack('!B', data[0:1])[0]
@@ -157,7 +160,7 @@ class UdpServer:
             None
 
     def send_message(self, data, client_address):
-        self.socket.sendto(data, client_address)
+        self.auth_socket.sendto(data, client_address)
 
         if data[0] != 0x00:
             if (msg_id := struct.unpack('!H', data[1:3])[0]) not in self.pending_messages:

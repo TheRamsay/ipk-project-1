@@ -13,16 +13,19 @@ public class TcpTransport : ITransport
     private readonly Options _options;
 
     private NetworkStream? _stream;
+    private ProtocolState _protocolState;
 
     public event EventHandler<IBaseModel> OnMessage;
 
     public TcpTransport(Options options, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
+        _options = options;
     }
 
-    public async Task Start()
+    public async Task Start(ProtocolState protocolState)
     {
+        _protocolState = protocolState;
         await _client.ConnectAsync(_options.Host, _options.Port);
         _stream = _client.GetStream();
         

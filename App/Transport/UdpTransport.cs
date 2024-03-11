@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using App.Enums;
 using App.Models;
 using App.Models.udp;
 
@@ -16,6 +17,7 @@ public class UdpTransport : ITransport
     private readonly HashSet<short> _processedMessages = new();
 
     private short _messageIdSequence = 0;
+    private ProtocolState _protocolState;
 
     public event EventHandler<IBaseModel>? OnMessage;
     private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
@@ -98,8 +100,9 @@ public class UdpTransport : ITransport
         await Send(new UdpByeModel());
     }
 
-    public async Task Start()
+    public async Task Start(ProtocolState protocolState)
     {
+        _protocolState = protocolState;
         await Connect();
 
         while (!_cancellationToken.IsCancellationRequested)
@@ -108,7 +111,7 @@ public class UdpTransport : ITransport
             var from = response.RemoteEndPoint;
             var receiveBuffer = response.Buffer;
             var parsedData = ParseMessage(receiveBuffer);
-
+            
             if (parsedData is UdpConfirmModel confirmModel)
             {
                 OnMessageConfirmed?.Invoke(this, confirmModel);
@@ -146,6 +149,11 @@ public class UdpTransport : ITransport
                             new MessageModel() { Content = data.Content, DisplayName = data.DisplayName });
                         break;
                     case UdpReplyModel data:
+                        if (_protocolState == ProtocolState.Auth)
+                        {
+                            Console.WriteLine($"[RECONNECT] New communication port {from.Port}");
+                            _client.Connect(_options.Host, from.Port);
+                        }
                         OnMessage?.Invoke(this, new ReplyModel() { Content = data.Content, Status = data.Status });
                         break;
                     case UdpByeModel _:

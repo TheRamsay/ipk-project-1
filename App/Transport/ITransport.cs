@@ -1,4 +1,5 @@
-﻿using App.Models;
+﻿using App.Enums;
+using App.Models;
 
 namespace App.Transport;
 
@@ -12,6 +13,6 @@ public interface ITransport
     public Task Error(MessageModel data);
     public Task Reply(ReplyModel data);
     public Task Bye();
-    public Task Start();
+    public Task Start(ProtocolState protocolState);
     public Task Disconnect();
 }
