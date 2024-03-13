@@ -89,7 +89,7 @@ public class TcpTransport : ITransport
     }
 
     private IBaseModel ParseMessage(string message)
-        => message.Split(" ") switch
+        => message.ToUpper().Split(" ") switch
         {
             ["JOIN", var channelId, "AS", var dName] => new JoinModel() { ChannelId = channelId, DisplayName = dName },
             ["AUTH", var userId, "AS", var dName, "USING", var secret] => new AuthModel()
