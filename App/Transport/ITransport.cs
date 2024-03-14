@@ -6,6 +6,7 @@ namespace App.Transport;
 public interface ITransport
 {
     public event EventHandler<IBaseModel> OnMessage;
+    public event EventHandler OnSendingReady;
     
     public Task Auth(AuthModel data);
     public Task Join(JoinModel data);

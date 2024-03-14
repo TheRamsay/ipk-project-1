@@ -1,4 +1,5 @@
 ﻿using App.Enums;
+using App.input;
 using App.Models;
 using App.Models.udp;
 using App.Transport;
@@ -9,20 +10,23 @@ public class ChatClient
 {
     private readonly ITransport _transport;
     private readonly CancellationTokenSource _cancellationTokenSource;
+    private readonly IStandardInputReader _standardInputReader;
+    private readonly MessageQueue _messageQueue = new();
     
     private ProtocolState _protocolState;
     private string _displayName = String.Empty;
 
-    private readonly ReplyLock _authLock = new("Waiting for a auth confirmation from the server, please wait for a moment..");
-    private readonly ReplyLock _joinLock = new("Waiting a join confirmation from the server, please wait for a moment..");
-
-    public ChatClient(ITransport transport, CancellationTokenSource cancellationTokenSource)
+    public ChatClient(ITransport transport, IStandardInputReader standardInputReader, CancellationTokenSource cancellationTokenSource)
     {
         _cancellationTokenSource = cancellationTokenSource;
         _transport = transport;
+        _standardInputReader = standardInputReader;
         
+        // Event subscription
         _transport.OnMessage += OnMessageReceived;
+        _transport.OnSendingReady += OnSendingReady;
         
+        // Initial state
         _protocolState = ProtocolState.Start;
     }
 
@@ -50,22 +54,13 @@ public class ChatClient
     {
         while (_protocolState is not ProtocolState.End || !_cancellationTokenSource.Token.IsCancellationRequested)
         {
-            var line = Console.ReadLine();
+            var line = _standardInputReader.ReadLine();
 
-            if (_protocolState == ProtocolState.End)
-            {
-                continue;
-            }
-
+            // Eof reached
             if (line is null)
             {
-                if (_protocolState is ProtocolState.Auth or ProtocolState.Error)
-                {
-                    await _transport.Disconnect();
-                    return;
-                }
-                
-                throw new Exception("Invalid state");
+                await _transport.Disconnect();
+                return;
             }
 
             if (line.Length == 0)
@@ -73,51 +68,17 @@ public class ChatClient
                 throw new Exception("Messages can't be empty.");
             }
 
-            if (_authLock.IsLocked)
-            {
-                Console.WriteLine(_authLock.InfoMessage);
-                continue;
-            }
-            
-            if (_joinLock.IsLocked) 
-            {
-                Console.WriteLine(_joinLock.InfoMessage);
-                continue;
-            }
-            
             var command = UserCommandModel.ParseCommand(line);
-            string[] parts;
-            
             switch (command.Command)
             {
                 case UserCommand.Auth:
-                    if (_protocolState == ProtocolState.Start)
-                    {
-                        parts = command.Content.Split(" ");
-                        await _transport.Auth(new AuthModel()
-                            { Username = parts[0], Secret = parts[1], DisplayName = parts[2] }
-                        );
-
-                        _authLock.Lock();
-                        _displayName = parts[2];
-                        _protocolState = ProtocolState.Auth;
-                        break;
-                    }
-                    
-                    throw new Exception("Invalid state");
+                    await _messageQueue.EnqueueMessageAsync(Auth(command));
+                    break;
                 case UserCommand.Join:
-                    if (_protocolState == ProtocolState.Open)
-                    {
-                        parts = command.Content.Split(" ");
-                        await _transport.Join(new JoinModel() { ChannelId = parts[0], DisplayName = _displayName});
-                        _joinLock.Lock();
-                        break;
-                    }
-                    
-                    throw new Exception("Invalid state");
+                    await _messageQueue.EnqueueMessageAsync(Join(command));
+                    break;
                 case UserCommand.Rename:
-                    parts = command.Content.Split(" ");
-                    _displayName = parts[0];
+                    await _messageQueue.EnqueueMessageAsync(Rename(command));
                     break;
                 case UserCommand.Help:
                     Console.WriteLine("😼😼😼😼😼😼");
@@ -127,19 +88,12 @@ public class ChatClient
                     await _cancellationTokenSource.CancelAsync();
                     break;
                 case UserCommand.Message:
-                    if (_protocolState == ProtocolState.Open)
-                    {
-                        await _transport.Message(new MessageModel() { Content = line, DisplayName = _displayName});
-                    }
-                    else
-                    { 
-                        throw new Exception("Invalid state");
-                    }
-
+                    await _messageQueue.EnqueueMessageAsync(Message(command));
                     break;
                 default:
                     throw new Exception("Invalid state");
             }
+
             await Task.Delay(100);
         }
     }
@@ -195,14 +149,9 @@ public class ChatClient
                 {
                     
                     Console.WriteLine($"Success: {replyModel.Content}");
-                    if (_protocolState is ProtocolState.Auth)
-                    {
-                        _authLock.Unlock();
-                    }
-                    else
-                    {
-                        _joinLock.Unlock();
-                    }
+                    
+                    _messageQueue.Unlock();
+                    await _messageQueue.DequeueMessageAsync(); 
                     
                     _protocolState = ProtocolState.Open;
                 }
@@ -236,16 +185,52 @@ public class ChatClient
         }
     }
     
-    public UserCommand ParseCommand(string command)
+    public async void OnSendingReady(object? sender, EventArgs args)
     {
-        return command.Split(" ")[0] switch
+        _messageQueue.Unlock();
+        await _messageQueue.DequeueMessageAsync();
+    }
+    
+    public async Task Auth(UserCommandModel command)
+    {
+        if (_protocolState != ProtocolState.Start)
         {
-            "/auth" => UserCommand.Auth,
-            "/join" => UserCommand.Join,
-            "/rename" => UserCommand.Rename,
-            "/end" => UserCommand.End,
-            var s when s.StartsWith("/") => throw new Exception("Invalid command"),
-            _ => UserCommand.Message
-        };
+            throw new Exception("Invalid state");
+        }
+        
+        var parts = command.Content.Split(" ");
+        await _transport.Auth(new AuthModel()
+            { Username = parts[0], Secret = parts[1], DisplayName = parts[2] }
+        );
+
+        _displayName = parts[2];
+        _protocolState = ProtocolState.Auth;
+    }
+    
+    public async Task Join(UserCommandModel command)
+    {
+        if (_protocolState != ProtocolState.Open)
+        {
+            throw new Exception("Invalid state");
+        }
+        
+        var parts = command.Content.Split(" ");
+        await _transport.Join(new JoinModel() { ChannelId = parts[0], DisplayName = _displayName });
+    }
+    
+    public async Task Message(UserCommandModel command)
+    {
+        if (_protocolState != ProtocolState.Open)
+        {
+            throw new Exception("Invalid state");
+        }
+        
+        await _transport.Message(new MessageModel() { Content = command.Content, DisplayName = _displayName });
+    }
+
+    public async Task Rename(UserCommandModel command)
+    {
+        var parts = command.Content.Split(" ");
+        _displayName = parts[0];
     }
 }

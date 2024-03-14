@@ -12,7 +12,6 @@ public class UdpTransport : ITransport
     private readonly CancellationToken _cancellationToken;
     private readonly UdpClient _client = new();
     private readonly Options _options;
-
     private readonly Dictionary<short, int> _pendingMessages = new();
     private readonly HashSet<short> _processedMessages = new();
 
@@ -22,6 +21,7 @@ public class UdpTransport : ITransport
     public event EventHandler<IBaseModel>? OnMessage;
     private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
     public event EventHandler<IModelWithId> OnTimeoutExpired;
+    public event EventHandler? OnSendingReady;
 
     public UdpTransport(Options options, CancellationToken cancellationToken)
     {
@@ -196,16 +196,17 @@ public class UdpTransport : ITransport
         return IBaseUdpModel.Deserialize(data);
     }
 
-    private void OnMessageConfirmedHandler(object sender, UdpConfirmModel data)
+    private void OnMessageConfirmedHandler(object? sender, UdpConfirmModel data)
     {
         if (_pendingMessages.ContainsKey(data.RefMessageId))
         {
+            OnSendingReady?.Invoke(this, EventArgs.Empty);
             Console.WriteLine($"Message {data.RefMessageId} has been confirmed");
             _pendingMessages.Remove(data.RefMessageId);
         }
     }
 
-    private async void OnTimeoutExpiredHandler(object sender, IModelWithId data)
+    private async void OnTimeoutExpiredHandler(object? sender, IModelWithId data)
     {
         if (_pendingMessages.TryGetValue(data.Id, out var retries))
         {

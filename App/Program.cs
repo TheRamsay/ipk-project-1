@@ -2,11 +2,13 @@
 using System.Net.Sockets;
 using System.Text;
 using App.Enums;
+using App.input;
 using App.Models;
 using App.Models.udp;
 using App.Transport;
 using CommandLine;
 using Serilog;
+using Serilog.Sinks.Grafana.Loki;
 
 namespace App;
 static class Program
@@ -20,14 +22,6 @@ static class Program
     
     public static async Task RunClient(Options opt)
     {
-        Log.Logger = new LoggerConfiguration()
-            .WriteTo.Console()
-            .WriteTo.Seq("http://localhost:5341")
-            .CreateLogger();
-        
-        Log.Information("Starting the client with options: {@Options}", opt);
-        await Log.CloseAndFlushAsync();
-        
         var source = new CancellationTokenSource();
         
         ITransport transport;
@@ -39,8 +33,8 @@ static class Program
         {
            transport = new TcpTransport(opt, source.Token);
         }
-        
-        var client = new ChatClient(transport, source);
+
+        var client = new ChatClient(transport, new StandardInputReader(), source);
         await client.Start();
     }
 } 
