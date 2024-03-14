@@ -12,7 +12,7 @@ public class UdpTransport : ITransport
     private readonly CancellationToken _cancellationToken;
     private readonly UdpClient _client = new();
     private readonly Options _options;
-    
+
     private readonly Dictionary<short, int> _pendingMessages = new();
     private readonly HashSet<short> _processedMessages = new();
 
@@ -39,7 +39,7 @@ public class UdpTransport : ITransport
 
     public async Task Disconnect()
     {
-        await Bye(); 
+        await Bye();
         _client.Close();
     }
 
@@ -97,7 +97,7 @@ public class UdpTransport : ITransport
 
     public async Task Bye()
     {
-        await Send(new UdpByeModel());
+        await Send(new UdpByeModel() { Id = _messageIdSequence++ });
     }
 
     public async Task Start(ProtocolState protocolState)
@@ -111,7 +111,7 @@ public class UdpTransport : ITransport
             var from = response.RemoteEndPoint;
             var receiveBuffer = response.Buffer;
             var parsedData = ParseMessage(receiveBuffer);
-            
+
             if (parsedData is UdpConfirmModel confirmModel)
             {
                 OnMessageConfirmed?.Invoke(this, confirmModel);
@@ -125,7 +125,7 @@ public class UdpTransport : ITransport
                     Console.WriteLine($"Skipping message {modelWithId.Id}, duplicate");
                     return;
                 }
-                
+
                 await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
 
                 _processedMessages.Add(modelWithId.Id);
@@ -154,6 +154,7 @@ public class UdpTransport : ITransport
                             Console.WriteLine($"[RECONNECT] New communication port {from.Port}");
                             _client.Connect(_options.Host, from.Port);
                         }
+
                         OnMessage?.Invoke(this, new ReplyModel() { Content = data.Content, Status = data.Status });
                         break;
                     case UdpByeModel _:

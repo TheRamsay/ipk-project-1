@@ -13,11 +13,8 @@ public class ChatClient
     private ProtocolState _protocolState;
     private string _displayName = String.Empty;
 
-    private ReplyLock _authLock = new("Waiting for a auth confirmation from the server.");
-    private ReplyLock _joinLock = new("Waiting a join confirmation from the server.");
-
-    private string _authLockString = "Waiting for a auth confirmation from the server.";
-    private string _joinLockString = "Waiting a join confirmation from the server.";
+    private readonly ReplyLock _authLock = new("Waiting for a auth confirmation from the server, please wait for a moment..");
+    private readonly ReplyLock _joinLock = new("Waiting a join confirmation from the server, please wait for a moment..");
 
     public ChatClient(ITransport transport, CancellationTokenSource cancellationTokenSource)
     {
@@ -76,17 +73,16 @@ public class ChatClient
                 throw new Exception("Messages can't be empty.");
             }
 
-            while (_authLock.IsLocked || _joinLock.IsLocked)
+            if (_authLock.IsLocked)
             {
-                if (_authLock.IsLocked)
-                {
-                    Console.WriteLine(_authLock.InfoMessage);
-                }
-                else
-                {
-                    Console.WriteLine(_joinLock.InfoMessage);
-                }
-                await Task.Delay(100);
+                Console.WriteLine(_authLock.InfoMessage);
+                continue;
+            }
+            
+            if (_joinLock.IsLocked) 
+            {
+                Console.WriteLine(_joinLock.InfoMessage);
+                continue;
             }
             
             var command = UserCommandModel.ParseCommand(line);
@@ -99,11 +95,11 @@ public class ChatClient
                     {
                         parts = command.Content.Split(" ");
                         await _transport.Auth(new AuthModel()
-                            { Username = parts[1], Secret = parts[2], DisplayName = parts[3] }
+                            { Username = parts[0], Secret = parts[1], DisplayName = parts[2] }
                         );
 
                         _authLock.Lock();
-                        _displayName = parts[3];
+                        _displayName = parts[2];
                         _protocolState = ProtocolState.Auth;
                         break;
                     }
@@ -113,7 +109,7 @@ public class ChatClient
                     if (_protocolState == ProtocolState.Open)
                     {
                         parts = command.Content.Split(" ");
-                        await _transport.Join(new JoinModel() { ChannelId = parts[1], DisplayName = _displayName});
+                        await _transport.Join(new JoinModel() { ChannelId = parts[0], DisplayName = _displayName});
                         _joinLock.Lock();
                         break;
                     }
@@ -121,7 +117,7 @@ public class ChatClient
                     throw new Exception("Invalid state");
                 case UserCommand.Rename:
                     parts = command.Content.Split(" ");
-                    _displayName = parts[1];
+                    _displayName = parts[0];
                     break;
                 case UserCommand.Help:
                     Console.WriteLine("😼😼😼😼😼😼");
@@ -242,7 +238,7 @@ public class ChatClient
     
     public UserCommand ParseCommand(string command)
     {
-        return command switch
+        return command.Split(" ")[0] switch
         {
             "/auth" => UserCommand.Auth,
             "/join" => UserCommand.Join,
