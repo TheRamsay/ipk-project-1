@@ -2,6 +2,8 @@
 using App.Models;
 using App.Models.udp;
 using App.Transport;
+using Serilog;
+using Serilog.Core;
 
 namespace App;
 
@@ -9,6 +11,7 @@ public class ChatClient
 {
     private readonly ITransport _transport;
     private readonly CancellationTokenSource _cancellationTokenSource;
+    private readonly ILogger _logger;
     
     private ProtocolState _protocolState;
     private string _displayName = String.Empty;
@@ -16,10 +19,11 @@ public class ChatClient
     private readonly ReplyLock _authLock = new("Waiting for a auth confirmation from the server, please wait for a moment..");
     private readonly ReplyLock _joinLock = new("Waiting a join confirmation from the server, please wait for a moment..");
 
-    public ChatClient(ITransport transport, CancellationTokenSource cancellationTokenSource)
+    public ChatClient(ITransport transport, CancellationTokenSource cancellationTokenSource, Serilog.ILogger logger)
     {
         _cancellationTokenSource = cancellationTokenSource;
         _transport = transport;
+        _logger = logger;
         
         _transport.OnMessage += OnMessageReceived;
         
@@ -33,14 +37,17 @@ public class ChatClient
         
         try
         {
+            _logger.Information("Starting receiving.");
             await await Task.WhenAny(transportTask, stdinTask);
         }
         catch (Exception e)
         {
             Console.WriteLine($"ERROR: {e}");
+            _logger.Error(e, "an error occurred");
         }
         finally
         {
+            _logger.Information("Client disconnecting");
             await _transport.Disconnect();
             await _cancellationTokenSource.CancelAsync();
         }

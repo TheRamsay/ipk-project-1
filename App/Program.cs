@@ -23,6 +23,7 @@ static class Program
         Log.Logger = new LoggerConfiguration()
             .WriteTo.Console()
             .WriteTo.Seq("http://localhost:5341")
+            .Enrich.WithProperty("Project", "IPK.Project1")
             .CreateLogger();
         
         Log.Information("Starting the client with options: {@Options}", opt);
@@ -37,10 +38,10 @@ static class Program
         }
         else
         {
-           transport = new TcpTransport(opt, source.Token);
+           transport = new TcpTransport(opt, source.Token, Log.Logger);
         }
         
-        var client = new ChatClient(transport, source);
+        var client = new ChatClient(transport, source, Log.Logger);
         await client.Start();
     }
 } 
