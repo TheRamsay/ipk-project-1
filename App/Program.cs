@@ -6,9 +6,9 @@ using App.Models;
 using App.Models.udp;
 using App.Transport;
 using CommandLine;
+using Serilog;
 
 namespace App;
-
 static class Program
 {
     static void Main(string[] args)
@@ -20,6 +20,14 @@ static class Program
     
     public static async Task RunClient(Options opt)
     {
+        Log.Logger = new LoggerConfiguration()
+            .WriteTo.Console()
+            .WriteTo.Seq("http://localhost:5341")
+            .CreateLogger();
+        
+        Log.Information("Starting the client with options: {@Options}", opt);
+        await Log.CloseAndFlushAsync();
+        
         var source = new CancellationTokenSource();
         
         ITransport transport;

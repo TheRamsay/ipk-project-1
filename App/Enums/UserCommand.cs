@@ -14,7 +14,7 @@ public record UserCommandModel(UserCommand Command, string Content)
 {
     public static UserCommandModel ParseCommand(string command)
     {
-        return command switch
+        return command.Split(" ")[0] switch
         {
             "/auth" => new UserCommandModel(UserCommand.Auth, GetContent(command.Split(" "))),
             "/join" => new UserCommandModel(UserCommand.Join, GetContent(command.Split(" "))),
