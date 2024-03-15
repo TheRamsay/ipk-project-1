@@ -122,7 +122,7 @@ public class UdpTransport : ITransport
                 if (_processedMessages.Contains(modelWithId.Id))
                 {
                     await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
-                    Console.WriteLine($"Skipping message {modelWithId.Id}, duplicate");
+                    // Console.WriteLine($"Skipping message {modelWithId.Id}, duplicate");
                     return;
                 }
 
@@ -151,7 +151,7 @@ public class UdpTransport : ITransport
                     case UdpReplyModel data:
                         if (_protocolState == ProtocolState.Auth)
                         {
-                            Console.WriteLine($"[RECONNECT] New communication port {from.Port}");
+                            // Console.WriteLine($"[RECONNECT] New communication port {from.Port}");
                             _client.Connect(_options.Host, from.Port);
                         }
 
@@ -177,15 +177,15 @@ public class UdpTransport : ITransport
         {
             if (!_pendingMessages.TryGetValue(modelWithId.Id, out _))
             {
-                Console.WriteLine($"Added message {modelWithId.Id} to pendings");
+                // Console.WriteLine($"Added message {modelWithId.Id} to pendings");
                 _pendingMessages[modelWithId.Id] = 0;
             }
 
             Task.Run(async () =>
             {
-                Console.WriteLine($"Created timeout for message {modelWithId.Id}");
+                // Console.WriteLine($"Created timeout for message {modelWithId.Id}");
                 await Task.Delay(_options.Timeout);
-                Console.WriteLine($"Timeout for message {modelWithId.Id} has expired");
+                // Console.WriteLine($"Timeout for message {modelWithId.Id} has expired");
                 OnTimeoutExpired.Invoke(this, modelWithId);
             });
         }
@@ -201,7 +201,7 @@ public class UdpTransport : ITransport
         if (_pendingMessages.ContainsKey(data.RefMessageId))
         {
             OnSendingReady?.Invoke(this, EventArgs.Empty);
-            Console.WriteLine($"Message {data.RefMessageId} has been confirmed");
+            // Console.WriteLine($"Message {data.RefMessageId} has been confirmed");
             _pendingMessages.Remove(data.RefMessageId);
         }
     }
@@ -213,7 +213,7 @@ public class UdpTransport : ITransport
             if (retries < _options.Rentransmissions)
             {
                 _pendingMessages[data.Id] = retries + 1;
-                Console.WriteLine($"Resending message {data.Id}");
+                // Console.WriteLine($"Resending message {data.Id}");
                 await Send((IBaseUdpModel)data);
             }
             else

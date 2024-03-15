@@ -148,12 +148,11 @@ public class ChatClient
                 if (replyModel.Status)
                 {
                     
-                    Console.WriteLine($"Success: {replyModel.Content}");
-                    
-                    _messageQueue.Unlock();
-                    await _messageQueue.DequeueMessageAsync(); 
+                    Console.WriteLine($"Success: {replyModel.Content}, unlocking the queue, semaphore: {_messageQueue._semaphore}");
                     
                     _protocolState = ProtocolState.Open;
+                    _messageQueue.Unlock();
+                    await _messageQueue.DequeueMessageAsync(); 
                 }
                 else
                 {
@@ -187,6 +186,7 @@ public class ChatClient
     
     public async void OnSendingReady(object? sender, EventArgs args)
     {
+        Console.WriteLine("Received sending ready event, unlocking the queue");
         _messageQueue.Unlock();
         await _messageQueue.DequeueMessageAsync();
     }
@@ -197,6 +197,9 @@ public class ChatClient
         {
             throw new Exception("Invalid state");
         }
+        
+        Console.WriteLine("Authenticating..., locking the queue");
+        _messageQueue.Lock();
         
         var parts = command.Content.Split(" ");
         await _transport.Auth(new AuthModel()
@@ -213,6 +216,9 @@ public class ChatClient
         {
             throw new Exception("Invalid state");
         }
+        
+        Console.WriteLine("Joining..., locking the queue");
+        _messageQueue.Lock();
         
         var parts = command.Content.Split(" ");
         await _transport.Join(new JoinModel() { ChannelId = parts[0], DisplayName = _displayName });

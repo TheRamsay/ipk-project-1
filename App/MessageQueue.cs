@@ -6,21 +6,21 @@ public class MessageQueue
 {
     private readonly Queue<Task> _messageQueue = new();
     
-    private int _semaphore = 0;
+    public int _semaphore = 0;
     private bool Enabled => _semaphore == 0;
 
     public async Task EnqueueMessageAsync(Task task)
     {
-        _messageQueue.Enqueue(task);
-        
+        Console.WriteLine("Enqueuing message before if, semaphore: " + _semaphore);
         if (!Enabled)
         {
+            _messageQueue.Enqueue(task);
             return;
         }
         
-        var message = _messageQueue.Dequeue();
+        Console.WriteLine("Enqueued message, awaiting... locking the queue, semaphore: " + _semaphore);
         Lock();
-        await message;
+        await task;
     }
     
     public async Task DequeueMessageAsync()
@@ -31,6 +31,7 @@ public class MessageQueue
         }
         
         var message = _messageQueue.Dequeue();
+        Console.WriteLine("Dequeued message, awaiting... locking the queue, semaphore: " + _semaphore);
         Lock();
         await message;
     }

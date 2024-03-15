@@ -12,7 +12,6 @@ public class TcpTransport : ITransport
     private readonly CancellationToken _cancellationToken;
     private readonly TcpClient _client = new();
     private readonly Options _options;
-    private readonly ILogger _logger;
 
     private NetworkStream? _stream;
     private ProtocolState _protocolState;
@@ -20,11 +19,10 @@ public class TcpTransport : ITransport
     public event EventHandler<IBaseModel> OnMessage;
     public event EventHandler? OnSendingReady;
 
-    public TcpTransport(Options options, CancellationToken cancellationToken, ILogger logger)
+    public TcpTransport(Options options, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
         _options = options;
-        _logger = logger;
     }
 
     public async Task Start(ProtocolState protocolState)
@@ -35,21 +33,21 @@ public class TcpTransport : ITransport
         
         // TODO: uh oh 20_000
         _stream.ReadTimeout = 20000;
-        _logger.Information("TcpTransport connected with options {@Options}", _options);
+        // _logger.Information("TcpTransport connected with options {@Options}", _options);
 
         while (!_cancellationToken.IsCancellationRequested)
         {
             var receiveBuffer = new byte[2048];
             await _stream.ReadAsync(receiveBuffer);
             var responseData = Encoding.UTF8.GetString(receiveBuffer);
-            _logger.Debug("Received a message {@responseData}", responseData);
+            // _logger.Debug("Received a message {@responseData}", responseData);
             OnMessage.Invoke(this, ParseMessage(responseData));
         }
     }
 
     public async Task Disconnect()
     {
-        _logger.Information("Closing the connection");
+        // _logger.Information("Closing the connection");
         await Bye(); 
         _client.Close();
     }
@@ -88,7 +86,7 @@ public class TcpTransport : ITransport
     private async Task Send(string message)
     {
         message = $"{message}\r\n";
-        _logger.Debug("Sent a message {@message}", message);
+        // _logger.Debug("Sent a message {@message}", message);
         var bytes = Encoding.UTF8.GetBytes(message);
         if (_stream != null)
         {
