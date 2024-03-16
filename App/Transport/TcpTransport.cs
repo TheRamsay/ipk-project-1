@@ -17,7 +17,7 @@ public class TcpTransport : ITransport
     private ProtocolState _protocolState;
 
     public event EventHandler<IBaseModel> OnMessage;
-    public event EventHandler? OnSendingReady;
+    public event EventHandler? OnMessageDelivered;
 
     public TcpTransport(Options options, CancellationToken cancellationToken)
     {
@@ -91,7 +91,7 @@ public class TcpTransport : ITransport
         if (_stream != null)
         {
             await _stream.WriteAsync(bytes);
-            OnSendingReady?.Invoke(this, EventArgs.Empty);
+            OnMessageDelivered?.Invoke(this, EventArgs.Empty);
         }
     }
 

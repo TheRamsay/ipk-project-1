@@ -8,12 +8,11 @@ using App.Models.udp;
 using App.Transport;
 using CommandLine;
 using Serilog;
-using Serilog.Sinks.Grafana.Loki;
 
 namespace App;
 static class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
         new Parser(with => with.CaseInsensitiveEnumValues = true)
             .ParseArguments<Options>(args)

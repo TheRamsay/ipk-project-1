@@ -21,7 +21,7 @@ public class UdpTransport : ITransport
     public event EventHandler<IBaseModel>? OnMessage;
     private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
     public event EventHandler<IModelWithId> OnTimeoutExpired;
-    public event EventHandler? OnSendingReady;
+    public event EventHandler? OnMessageDelivered;
 
     public UdpTransport(Options options, CancellationToken cancellationToken)
     {
@@ -200,7 +200,7 @@ public class UdpTransport : ITransport
     {
         if (_pendingMessages.ContainsKey(data.RefMessageId))
         {
-            OnSendingReady?.Invoke(this, EventArgs.Empty);
+            OnMessageDelivered?.Invoke(this, EventArgs.Empty);
             // Console.WriteLine($"Message {data.RefMessageId} has been confirmed");
             _pendingMessages.Remove(data.RefMessageId);
         }

@@ -10,7 +10,9 @@ public class Ipk24ChatProtocol
     
     private ProtocolState _protocolState;
     private string _displayName;
-
+    private SemaphoreSlim _messageDeliveredSignal = new (0, 1);
+    private SemaphoreSlim _messageProcessedSignal = new (0, 1);
+    
     public event EventHandler<IBaseModel> OnMessage;
     public event EventHandler<Exception> OnError;
     
@@ -20,6 +22,7 @@ public class Ipk24ChatProtocol
         
         // Event subscription
         _transport.OnMessage += OnMessageReceived;
+        _transport.OnMessageDelivered += OnMessageDelivered;
     }
     
     public async Task Start(ProtocolState protocolState)
@@ -31,21 +34,46 @@ public class Ipk24ChatProtocol
     public async Task Auth(string username, string password, string displayName)
     {
         await _transport.Auth(new AuthModel() { Username = username, Secret = password, DisplayName = displayName });
+        await Task.WhenAll(_messageProcessedSignal.WaitAsync(), _messageDeliveredSignal.WaitAsync());
     }
     
     public async Task Join(string displayName, string channel)
     {
         await _transport.Join(new JoinModel() { DisplayName = displayName, ChannelId = channel });
+        await Task.WhenAll(_messageProcessedSignal.WaitAsync(), _messageDeliveredSignal.WaitAsync());
     }
     
     public async Task Message(string displayName, string message)
     {
         await _transport.Message(new MessageModel() { DisplayName = displayName, Content= message });
+        await _messageDeliveredSignal.WaitAsync();
     }
     
     public async Task Disconnect()
     {
         await _transport.Disconnect();
+    }
+
+    private enum StateTransitionType
+    {
+        Any,
+        Msg,
+        Err,
+        Bye,
+        Auth,
+        Join,
+        Reply
+    }
+    
+    private Task StateTransition(IBaseModel data)
+    {
+        // (current_state, input, output)
+        var transition = (_protocolState, StateTransitionType.Any, StateTransitionType.Auth);
+        return transition switch
+        {
+            (ProtocolState.Start, StateTransitionType.Any, StateTransitionType.Auth) => Auth("", "", ""),
+            (ProtocolState.Auth, StateTransitionType.Reply, StateTransitionType.Auth) => 
+        };
     }
     
     public async void OnMessageReceived(object? sender, IBaseModel model)
@@ -99,14 +127,17 @@ public class Ipk24ChatProtocol
                 {
                     
                     // Console.WriteLine($"Success: {replyModel.Content}, unlocking the queue, semaphore: {_messageQueue._semaphore}");
-                    OnMessage?.Invoke(this, replyModel);
                     _protocolState = ProtocolState.Open;
+                    _messageProcessedSignal.Release();
+                    OnMessage?.Invoke(this, replyModel);
+
                     // _messageQueue.Unlock();
                     // await _messageQueue.DequeueMessageAsync(); 
                 }
                 else
                 {
-                    OnMessage?.Invoke(this, replyModel);
+                    _messageProcessedSignal.Release();
+
                     if (_protocolState is ProtocolState.Auth)
                     {
                         throw new Exception("Authentication error");
@@ -132,5 +163,10 @@ public class Ipk24ChatProtocol
             await _transport.Disconnect();
             // await _cancellationTokenSource.CancelAsync();
         }
+    }
+
+    private void OnMessageDelivered(object? sender, EventArgs args)
+    {
+        _messageDeliveredSignal.Release();
     }
 }

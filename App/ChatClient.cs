@@ -24,7 +24,7 @@ public class ChatClient
         
         // Event subscription
         _transport.OnMessage += OnMessageReceived;
-        _transport.OnSendingReady += OnSendingReady;
+        _transport.OnMessageDelivered += OnMessageDelivered;
         
         // Initial state
         _protocolState = ProtocolState.Start;
@@ -97,94 +97,8 @@ public class ChatClient
             await Task.Delay(100);
         }
     }
-
-    private async void OnMessageReceived(object? sender, IBaseModel args)
-    {
-        
-        switch (args)
-        {
-            case JoinModel _:
-                if (_protocolState is not ProtocolState.Open)
-                {
-                    throw new Exception("Invalid state");
-                }
-
-                await _transport.Error(new MessageModel() { Content = "Invalid JOIN message type", DisplayName = _displayName});
-                _protocolState = ProtocolState.Error;
-                break;
-            case AuthModel _:
-                if (_protocolState is not ProtocolState.Open)
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                await _transport.Error(new MessageModel() { Content = "Invalid AUTH message type", DisplayName = _displayName});
-                _protocolState = ProtocolState.Error;
-                break;
-            case MessageModel messageModel:
-                if (_protocolState is not ProtocolState.Open)
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                Console.WriteLine($"[RECEIVED] {messageModel.DisplayName}: {messageModel.Content}");
-                break;
-            case ErrorModel errorModel:
-                if (_protocolState is not (ProtocolState.Open or ProtocolState.Auth))
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                Console.WriteLine($"Error from {errorModel.DisplayName}: {string.Join(" ", errorModel.Content)}");
-                
-                _protocolState = ProtocolState.End;
-                break;
-            case ReplyModel replyModel:
-                if (_protocolState is not (ProtocolState.Auth or ProtocolState.Open))
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                if (replyModel.Status)
-                {
-                    
-                    Console.WriteLine($"Success: {replyModel.Content}, unlocking the queue, semaphore: {_messageQueue._semaphore}");
-                    
-                    _protocolState = ProtocolState.Open;
-                    _messageQueue.Unlock();
-                    await _messageQueue.DequeueMessageAsync(); 
-                }
-                else
-                {
-                    Console.WriteLine($"Failure: {string.Join(" ", replyModel.Content)}");
-                    if (_protocolState is ProtocolState.Auth)
-                    {
-                        throw new Exception("Authentication error");
-                    }
-                    
-                    throw new Exception("Join error");
-                }
-                break;
-            case ByeModel _:
-                if (_protocolState is ProtocolState.Open)
-                {
-                    _protocolState = ProtocolState.End;
-                    break;
-                }
-                
-                throw new Exception("Invalid state");
-            default:
-                throw new Exception("Unknown message type received.");
-        }
-        
-        if (_protocolState == ProtocolState.End)
-        {
-            await _transport.Disconnect();
-            await _cancellationTokenSource.CancelAsync();
-        }
-    }
     
-    public async void OnSendingReady(object? sender, EventArgs args)
+    public async void OnMessageDelivered(object? sender, EventArgs args)
     {
         Console.WriteLine("Received sending ready event, unlocking the queue");
         _messageQueue.Unlock();
