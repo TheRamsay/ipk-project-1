@@ -41,6 +41,7 @@ class TCPServer:
                     # print("Sent error")
 
                 case ["JOIN", channel, "AS", display_name]:
+                    print("Joining room")
                     client.display_name = display_name
                     logger.debug(f"User {client.display_name} is joining room {channel}")
                     client.current_room = channel

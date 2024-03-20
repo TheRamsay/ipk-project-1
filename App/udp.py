@@ -78,10 +78,11 @@ class UdpServer:
             print(f"Received message from {client_address}: {decoded_message}")
 
             if not isinstance(decoded_message, ConfirmMessage):
-                # if decoded_message.message_id == 0:
-                #     print("Sleeping for 0.6 seconds")
-                #     time.sleep(1.5)
+                if decoded_message.message_id == 0:
+                    print("Sleeping for 0.6 seconds")
+                    time.sleep(1.5)
 
+                print("BLEEEE")
                 self.confirm_message(decoded_message.message_id, client_address)
 
                 if decoded_message.message_id in self.processed_messages:

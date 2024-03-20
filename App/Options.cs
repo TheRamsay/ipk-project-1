@@ -18,6 +18,6 @@ public class Options
     [Option('d', Required = false, Default = 3, HelpText = "UDP confirmation timeout")]
     public ushort Timeout { get; set; }
     
-    [Option('r', Default = 3, Required = false, HelpText = "Maximum number of UDP retransmissions")]
-    public byte Rentransmissions { get; set; }
+    [Option('r', Default = 250, Required = false, HelpText = "Maximum number of UDP retransmissions")]
+    public byte RetryCount { get; set; }
 }

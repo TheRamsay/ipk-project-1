@@ -5,15 +5,15 @@ namespace App.Transport;
 
 public interface ITransport
 {
-    public event EventHandler<IBaseModel> OnMessage;
+    public event EventHandler<IBaseModel> OnMessageReceived;
     public event EventHandler OnMessageDelivered;
     
     public Task Auth(AuthModel data);
     public Task Join(JoinModel data);
     public Task Message(MessageModel data);
-    public Task Error(MessageModel data);
+    public Task Error(ErrorModel data);
     public Task Reply(ReplyModel data);
     public Task Bye();
     public Task Start(ProtocolState protocolState);
-    public Task Disconnect();
+    public void Disconnect();
 }

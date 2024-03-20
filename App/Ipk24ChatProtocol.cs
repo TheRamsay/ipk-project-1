@@ -1,4 +1,5 @@
 ﻿using App.Enums;
+using App.Exceptions;
 using App.Models;
 using App.Transport;
 
@@ -7,166 +8,145 @@ namespace App;
 public class Ipk24ChatProtocol
 {
     private readonly ITransport _transport;
+    private readonly SemaphoreSlim _messageDeliveredSignal = new (0, 1);
+    private readonly SemaphoreSlim _messageProcessedSignal = new (0, 1);
     
     private ProtocolState _protocolState;
-    private string _displayName;
-    private SemaphoreSlim _messageDeliveredSignal = new (0, 1);
-    private SemaphoreSlim _messageProcessedSignal = new (0, 1);
+    private string _displayName = "Pepa";
     
-    public event EventHandler<IBaseModel> OnMessage;
-    public event EventHandler<Exception> OnError;
+    public event EventHandler<IBaseModel>? OnMessage;
+    public event EventHandler<Exception>? OnError;
     
     public Ipk24ChatProtocol(ITransport transport)
     {
         _transport = transport;
         
         // Event subscription
-        _transport.OnMessage += OnMessageReceived;
+        _transport.OnMessageReceived += OnMessageReceived;
         _transport.OnMessageDelivered += OnMessageDelivered;
     }
     
-    public async Task Start(ProtocolState protocolState)
+    public async Task Start()
     {
-        _protocolState = protocolState;
+        _protocolState = ProtocolState.Start;
         await _transport.Start(_protocolState);
     }
     
-    public async Task Auth(string username, string password, string displayName)
+    private async Task Auth(AuthModel data)
     {
-        await _transport.Auth(new AuthModel() { Username = username, Secret = password, DisplayName = displayName });
-        await Task.WhenAll(_messageProcessedSignal.WaitAsync(), _messageDeliveredSignal.WaitAsync());
+        _displayName = data.DisplayName;
+        await WaitForDeliveredAndProcessed(_transport.Auth(data));
     }
     
-    public async Task Join(string displayName, string channel)
+    private async Task Join(JoinModel data)
     {
-        await _transport.Join(new JoinModel() { DisplayName = displayName, ChannelId = channel });
-        await Task.WhenAll(_messageProcessedSignal.WaitAsync(), _messageDeliveredSignal.WaitAsync());
+        data.DisplayName = _displayName;
+        await WaitForDeliveredAndProcessed(_transport.Join(data));
     }
     
-    public async Task Message(string displayName, string message)
+    private async Task Message(MessageModel data)
     {
-        await _transport.Message(new MessageModel() { DisplayName = displayName, Content= message });
-        await _messageDeliveredSignal.WaitAsync();
+        await WaitForDelivered(_transport.Message(data));
     }
     
     public async Task Disconnect()
     {
-        await _transport.Disconnect();
-    }
-
-    private enum StateTransitionType
-    {
-        Any,
-        Msg,
-        Err,
-        Bye,
-        Auth,
-        Join,
-        Reply
+        // Send bye, wait for delivered and disconnect
+        await WaitForDelivered(_transport.Bye());
+        _transport.Disconnect();
     }
     
-    private Task StateTransition(IBaseModel data)
+    private async Task WaitForDelivered(Task task)
     {
-        // (current_state, input, output)
-        var transition = (_protocolState, StateTransitionType.Any, StateTransitionType.Auth);
-        return transition switch
-        {
-            (ProtocolState.Start, StateTransitionType.Any, StateTransitionType.Auth) => Auth("", "", ""),
-            (ProtocolState.Auth, StateTransitionType.Reply, StateTransitionType.Auth) => 
-        };
+        var tasks = new[] { _messageDeliveredSignal.WaitAsync(), task };
+        await Task.WhenAll(tasks);
     }
     
-    public async void OnMessageReceived(object? sender, IBaseModel model)
+    private async Task WaitForDeliveredAndProcessed(Task task)
     {
-        switch (model)
-        {
-            case JoinModel _:
-                if (_protocolState is not ProtocolState.Open)
-                {
-                    throw new Exception("Invalid state");
-                }
+        var tasks = new[] { _messageDeliveredSignal.WaitAsync(), _messageProcessedSignal.WaitAsync(), task };
+        await Task.WhenAll(tasks);
+    }
 
-                await _transport.Error(new MessageModel() { Content = "Invalid JOIN message type", DisplayName = _displayName});
-                _protocolState = ProtocolState.Error;
+    public async Task Send(IBaseModel model)
+    {
+        switch (_protocolState, model)
+        {
+            case (ProtocolState.Start, AuthModel data):
+                _protocolState = ProtocolState.Auth;
+                await Auth(data);
                 break;
-            case AuthModel _:
-                if (_protocolState is not ProtocolState.Open)
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                await _transport.Error(new MessageModel() { Content = "Invalid AUTH message type", DisplayName = _displayName});
-                _protocolState = ProtocolState.Error;
+            case (ProtocolState.WaitForAuth, AuthModel data):
+                _protocolState = ProtocolState.Auth;
+                await Auth(data);
                 break;
-            case MessageModel messageModel:
-                if (_protocolState is not ProtocolState.Open)
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                // Console.WriteLine($"[RECEIVED] {messageModel.DisplayName}: {messageModel.Content}");
-                OnMessage?.Invoke(this, messageModel);
+            case (ProtocolState.Open, MessageModel data):
+                await Message(data);
                 break;
-            case ErrorModel errorModel:
-                if (_protocolState is not (ProtocolState.Open or ProtocolState.Auth))
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                // Console.WriteLine($"Error from {errorModel.DisplayName}: {string.Join(" ", errorModel.Content)}");
+            case (ProtocolState.Open, JoinModel data):
+                await Join(data);
+                break;
+            case (ProtocolState.Auth or ProtocolState.Open or ProtocolState.Error or ProtocolState.WaitForAuth, ByeModel):
                 _protocolState = ProtocolState.End;
-                OnMessage?.Invoke(this, errorModel);
                 break;
-            case ReplyModel replyModel:
-                if (_protocolState is not (ProtocolState.Auth or ProtocolState.Open))
-                {
-                    throw new Exception("Invalid state");
-                }
-                
-                if (replyModel.Status)
-                {
-                    
-                    // Console.WriteLine($"Success: {replyModel.Content}, unlocking the queue, semaphore: {_messageQueue._semaphore}");
-                    _protocolState = ProtocolState.Open;
-                    _messageProcessedSignal.Release();
-                    OnMessage?.Invoke(this, replyModel);
-
-                    // _messageQueue.Unlock();
-                    // await _messageQueue.DequeueMessageAsync(); 
-                }
-                else
-                {
-                    _messageProcessedSignal.Release();
-
-                    if (_protocolState is ProtocolState.Auth)
-                    {
-                        throw new Exception("Authentication error");
-                    }
-                    
-                    throw new Exception("Join error");
-                }
-                break;
-            case ByeModel _:
-                if (_protocolState is ProtocolState.Open)
-                {
-                    _protocolState = ProtocolState.End;
-                    break;
-                }
-                
-                throw new Exception("Invalid state");
             default:
-                throw new Exception("Unknown message type received.");
+                await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
+                throw new InvalidInputException(_protocolState);
+        }
+    }
+    
+    private async Task Receive(IBaseModel model)
+    {
+        switch (_protocolState, model)
+        {
+            case (ProtocolState.Auth, ReplyModel { Status: true } data):
+                _protocolState = ProtocolState.Open;
+                _messageProcessedSignal.Release();
+                OnMessage?.Invoke(this, data);
+                break;
+            case (ProtocolState.Auth, ReplyModel { Status: false } data):
+                _protocolState = ProtocolState.WaitForAuth;
+                _messageProcessedSignal.Release();
+                OnMessage?.Invoke(this, data);
+                OnError?.Invoke(this, new Exception("Authentication failed"));
+                break;
+            case (ProtocolState.Open or ProtocolState.Auth, ErrorModel data):
+                _protocolState = ProtocolState.End;
+                OnError?.Invoke(this, new Exception($"Error from {data.DisplayName}: {string.Join(" ", data.Content)}"));
+                break;
+            case (ProtocolState.Open, MessageModel data):
+                OnMessage?.Invoke(this, data);
+                break;
+            case (ProtocolState.Open, ReplyModel data):
+                _messageProcessedSignal.Release();
+                OnMessage?.Invoke(this, data);
+                // TODO: Handle reply
+                break;
+            case (ProtocolState.Open, ByeModel data):
+                _protocolState = ProtocolState.End;
+                break;
+            default:
+                // TODO: prasiacke reseni
+                await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
+                OnError?.Invoke(this, new Exception("Invalid state transition"));
+                _protocolState = ProtocolState.End;
+                break;
+                // throw new Exception("Invalid state transition");
         }
         
         if (_protocolState == ProtocolState.End)
         {
-            await _transport.Disconnect();
-            // await _cancellationTokenSource.CancelAsync();
+            await Disconnect();
         }
     }
-
+    
     private void OnMessageDelivered(object? sender, EventArgs args)
     {
         _messageDeliveredSignal.Release();
+    }
+    
+    private async void OnMessageReceived(object? sender, IBaseModel model)
+    {
+        await Receive(model);
     }
 }
