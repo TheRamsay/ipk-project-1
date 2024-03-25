@@ -14,21 +14,16 @@ static class Program
 {
     static async Task Main(string[] args)
     {
-        var source = new CancellationTokenSource();
-        
-        Console.CancelKeyPress += (_, eventArgs) =>
-        {
-            eventArgs.Cancel = true;
-            source.Cancel();
-        };
         
         new Parser(with => with.CaseInsensitiveEnumValues = true)
             .ParseArguments<Options>(args)
-            .WithParsed(o => RunClient(o, source).Wait());
+            .WithParsed(o => RunClient(o).Wait());
     }
     
-    public static async Task RunClient(Options opt, CancellationTokenSource source)
+    public static async Task RunClient(Options opt)
     {
+var source = new CancellationTokenSource();
+        
         ITransport transport;
         if (opt.Protocol == TransportProtocol.Udp)
         {
@@ -42,6 +37,16 @@ static class Program
         var protocol = new Ipk24ChatProtocol(transport);
 
         var client = new ChatClient(protocol, new StandardInputReader(), source);
+        
+        Console.CancelKeyPress += async (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            Console.WriteLine("Exiting...");
+            // source.Cancel();
+            await client.Stop();
+            // await client._cancellationTokenSource.CancelAsync();
+        };
+        
         await client.Start();
     }
 } 

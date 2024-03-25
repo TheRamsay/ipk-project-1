@@ -19,9 +19,9 @@ public record UserCommandModel(UserCommand Command, string Content)
             "/auth" => new UserCommandModel(UserCommand.Auth, GetContent(command.Split(" "))),
             "/join" => new UserCommandModel(UserCommand.Join, GetContent(command.Split(" "))),
             "/rename" => new UserCommandModel(UserCommand.Rename, GetContent(command.Split(" "))),
+            // TODO: end is not a real command
             "/end" => new UserCommandModel(UserCommand.End, GetContent(command.Split(" "))),
             "/help" => new UserCommandModel(UserCommand.Help, GetContent(command.Split(" "))),
-            var s when s.StartsWith("/") => throw new Exception("Invalid command"),
             _ => new UserCommandModel(UserCommand.Message, command)
         };
 

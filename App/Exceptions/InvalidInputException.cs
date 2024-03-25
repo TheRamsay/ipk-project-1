@@ -3,4 +3,4 @@ using App.Models;
 
 namespace App.Exceptions;
 
-public class InvalidInputException(ProtocolState currentState) : Exception($"Invalid input (current state: {currentState}");
+public class InvalidInputException(ProtocolState currentState) : Exception($"Invalid input (current state: {currentState})");

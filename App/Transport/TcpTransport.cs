@@ -1,6 +1,7 @@
 ﻿using System.Net.Sockets;
 using System.Text;
 using App.Enums;
+using App.Exceptions;
 using App.Models;
 using App.Transport;
 
@@ -13,7 +14,7 @@ public class TcpTransport : ITransport
     private readonly Options _options;
 
     private NetworkStream? _stream;
-    private ProtocolState _protocolState;
+    private ProtocolStateBox _protocolState;
 
     public event EventHandler<IBaseModel>? OnMessageReceived;
     public event EventHandler? OnMessageDelivered;
@@ -24,7 +25,7 @@ public class TcpTransport : ITransport
         _options = options;
     }
 
-    public async Task Start(ProtocolState protocolState)
+    public async Task Start(ProtocolStateBox protocolState)
     {
         _protocolState = protocolState;
         await _client.ConnectAsync(_options.Host, _options.Port);
@@ -34,12 +35,21 @@ public class TcpTransport : ITransport
         // TODO: uh oh 20_000
         _stream.ReadTimeout = 20000;
 
-        while (!_cancellationToken.IsCancellationRequested)
+        while (true)
         {
             var receiveBuffer = new byte[2048];
-            await _stream.ReadAsync(receiveBuffer);
-            var responseData = Encoding.UTF8.GetString(receiveBuffer);
-            OnMessageReceived?.Invoke(this, ParseMessage(responseData));
+            var receivedBytes = await _stream.ReadAsync(receiveBuffer, _cancellationToken);
+            
+            // This means the server has closed the connection
+            if (receivedBytes == 0)
+            {
+                Console.WriteLine("Server has closed the connection");
+                break;
+            }
+            
+            var responseData = new ArraySegment<byte>(receiveBuffer, 0, receivedBytes).ToArray();
+            var responseString = Encoding.UTF8.GetString(responseData);
+            OnMessageReceived?.Invoke(this, ParseMessage(responseString));
         }
     }
 
@@ -103,7 +113,7 @@ public class TcpTransport : ITransport
             ["REPLY", var status, "IS", .. var content] => new ReplyModel()
                 { Status = status == "OK", Content = string.Join(" ", content) },
             ["BYE"] => new ByeModel(),
-            _ => throw new Exception("Unknown message type received.")
+            _ => throw new InvalidMessageReceivedException(_protocolState.State)
         };
     
     static string ReadUntilCrlf(StreamReader reader)

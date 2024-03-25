@@ -11,12 +11,10 @@ public class Ipk24ChatProtocol
     private readonly SemaphoreSlim _messageDeliveredSignal = new (0, 1);
     private readonly SemaphoreSlim _messageProcessedSignal = new (0, 1);
     
-    private ProtocolState _protocolState;
+    private ProtocolStateBox _protocolState;
     private string _displayName = "Pepa";
     
     public event EventHandler<IBaseModel>? OnMessage;
-    public event EventHandler<Exception>? OnError;
-    
     public Ipk24ChatProtocol(ITransport transport)
     {
         _transport = transport;
@@ -28,7 +26,7 @@ public class Ipk24ChatProtocol
     
     public async Task Start()
     {
-        _protocolState = ProtocolState.Start;
+        _protocolState = new ProtocolStateBox(ProtocolState.Start);
         await _transport.Start(_protocolState);
     }
     
@@ -70,14 +68,14 @@ public class Ipk24ChatProtocol
 
     public async Task Send(IBaseModel model)
     {
-        switch (_protocolState, model)
+        switch (_protocolState.State, model)
         {
             case (ProtocolState.Start, AuthModel data):
-                _protocolState = ProtocolState.Auth;
+                _protocolState.SetState(ProtocolState.Auth);
                 await Auth(data);
                 break;
             case (ProtocolState.WaitForAuth, AuthModel data):
-                _protocolState = ProtocolState.Auth;
+                _protocolState.SetState(ProtocolState.Auth);
                 await Auth(data);
                 break;
             case (ProtocolState.Open, MessageModel data):
@@ -87,32 +85,31 @@ public class Ipk24ChatProtocol
                 await Join(data);
                 break;
             case (ProtocolState.Auth or ProtocolState.Open or ProtocolState.Error or ProtocolState.WaitForAuth, ByeModel):
-                _protocolState = ProtocolState.End;
+                _protocolState.SetState(ProtocolState.End);
                 break;
             default:
                 await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
-                throw new InvalidInputException(_protocolState);
+                throw new InvalidInputException(_protocolState.State);
         }
     }
     
     private async Task Receive(IBaseModel model)
     {
-        switch (_protocolState, model)
+        switch (_protocolState.State, model)
         {
             case (ProtocolState.Auth, ReplyModel { Status: true } data):
-                _protocolState = ProtocolState.Open;
+                _protocolState.SetState(ProtocolState.Open);
                 _messageProcessedSignal.Release();
                 OnMessage?.Invoke(this, data);
                 break;
             case (ProtocolState.Auth, ReplyModel { Status: false } data):
-                _protocolState = ProtocolState.WaitForAuth;
+                _protocolState.SetState(ProtocolState.WaitForAuth);
                 _messageProcessedSignal.Release();
                 OnMessage?.Invoke(this, data);
-                OnError?.Invoke(this, new Exception("Authentication failed"));
                 break;
             case (ProtocolState.Open or ProtocolState.Auth, ErrorModel data):
-                _protocolState = ProtocolState.End;
-                OnError?.Invoke(this, new Exception($"Error from {data.DisplayName}: {string.Join(" ", data.Content)}"));
+                _protocolState.SetState(ProtocolState.End);
+                OnMessage?.Invoke(this, data);
                 break;
             case (ProtocolState.Open, MessageModel data):
                 OnMessage?.Invoke(this, data);
@@ -120,23 +117,20 @@ public class Ipk24ChatProtocol
             case (ProtocolState.Open, ReplyModel data):
                 _messageProcessedSignal.Release();
                 OnMessage?.Invoke(this, data);
-                // TODO: Handle reply
                 break;
             case (ProtocolState.Open, ByeModel data):
-                _protocolState = ProtocolState.End;
+                _protocolState.SetState(ProtocolState.End);
                 break;
             default:
-                // TODO: prasiacke reseni
-                await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
-                OnError?.Invoke(this, new Exception("Invalid state transition"));
-                _protocolState = ProtocolState.End;
+                _protocolState.SetState(ProtocolState.End);
                 break;
-                // throw new Exception("Invalid state transition");
         }
         
-        if (_protocolState == ProtocolState.End)
+        if (_protocolState.State == ProtocolState.End)
         {
-            await Disconnect();
+            await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
+            throw new Exception("Invalid state transition");
+            // await Disconnect();
         }
     }
     

@@ -78,9 +78,9 @@ class UdpServer:
             print(f"Received message from {client_address}: {decoded_message}")
 
             if not isinstance(decoded_message, ConfirmMessage):
-                if decoded_message.message_id == 0:
-                    print("Sleeping for 0.6 seconds")
-                    time.sleep(1.5)
+#                 if decoded_message.message_id == 0:
+#                     print("Sleeping for 0.6 seconds")
+#                     time.sleep(1.5)
 
                 print("BLEEEE")
                 self.confirm_message(decoded_message.message_id, client_address)
@@ -100,7 +100,8 @@ class UdpServer:
                 fmt = f"!B H B H {len(msg)}s B"
 
                 data = struct.pack(fmt, 0x01, self.msg_id, 0x01, decoded_message.message_id, bytes(msg, "ascii") , 0x00)
-                self.send_message(data, client_address)
+                print("Sending reply from different socket")
+                self.send_message(data, client_address, False)
                 self.msg_id += 1
 
             elif isinstance(decoded_message, JoinMessage):
@@ -160,8 +161,10 @@ class UdpServer:
         else:
             None
 
-    def send_message(self, data, client_address):
-        self.auth_socket.sendto(data, client_address)
+    def send_message(self, data, client_address, auth_socket=True):
+        socket = self.auth_socket if auth_socket else self.msg_socket
+
+        socket.sendto(data, client_address)
 
         if data[0] != 0x00:
             if (msg_id := struct.unpack('!H', data[1:3])[0]) not in self.pending_messages:

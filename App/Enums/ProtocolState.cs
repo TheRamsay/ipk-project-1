@@ -9,3 +9,18 @@ public enum ProtocolState
     Error,
     End
 }
+
+public class ProtocolStateBox
+{
+    public ProtocolState State { get; private set; }
+
+    public ProtocolStateBox(ProtocolState state)
+    {
+        State = state;
+    }
+
+    public void SetState(ProtocolState state)
+    {
+        State = state;
+    }
+}

@@ -14,6 +14,6 @@ public interface ITransport
     public Task Error(ErrorModel data);
     public Task Reply(ReplyModel data);
     public Task Bye();
-    public Task Start(ProtocolState protocolState);
+    public Task Start(ProtocolStateBox protocolState);
     public void Disconnect();
 }

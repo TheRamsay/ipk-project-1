@@ -34,8 +34,9 @@ class TCPServer:
                 case ["AUTH", username, "AS", display_name, "USING", password]:
                     logger.debug(f"Authenticating user {username} as {display_name} using password {password}")
                     client = Client(username, display_name, password, "lobby", writer, reader)
+                    self.clients.append(client)
                     await self.send_message(f"REPLY OK IS Welcome to the chat server {display_name}!\r\n", writer)
-                    await self.broadcast(f"MSG FROM Server IS {client.display_name} has joined room {client.current_room}\r\n", client.current_room)
+                    await self.broadcast(f"MSG FROM Server IS {client.display_name} has joined room {client.current_room}\r\n", client.current_room, None)
                     # print("Sending error")
                     # await self.send_message(f"ERR FROM Server IS This is a test error message\r\n", writer)
                     # print("Sent error")
@@ -46,9 +47,9 @@ class TCPServer:
                     logger.debug(f"User {client.display_name} is joining room {channel}")
                     client.current_room = channel
                     await self.send_message(f"REPLY OK IS Welcome to room {channel}\r\n", writer)
-                    await self.broadcast(f"MSG FROM Server IS {client.display_name} has joined room {client.current_room}\r\n", client.current_room)
+                    await self.broadcast(f"MSG FROM Server IS {client.display_name} has joined room {client.current_room}\r\n", client.current_room, None)
                 case ["MSG", "FROM", display_name, "IS", *content]:
-                    await self.broadcast(f"MSG FROM {display_name} IS {' '.join(content)}\r\n", client.current_room)
+                    await self.broadcast(f"MSG FROM {display_name} IS {' '.join(content)}\r\n", client.current_room, client)
                 case ["ERROR", "FROM", display_name, "IS", *content]:
                     logger.error(f"Received error from {display_name}: {' '.join(content)}")
                     await self.send_message(f"BYE\r\n", writer)
@@ -62,11 +63,13 @@ class TCPServer:
         # Remove the client when they disconnect
         self.clients.remove(writer)
 
-    async def broadcast(self, message: str, channel: str = "lobby"):
+    async def broadcast(self, message: str, channel: str = "lobby", from_client: Client = None):
+        print(self.clients)
         for client in self.clients:
+            if client.current_room != channel or (from_client and client.display_name == from_client.display_name):
+                continue
             try:
-                client.write(message.encode('ascii'))
-                # await client.writer.drain()
+                client.writer.write(message.encode('ascii'))
             except asyncio.CancelledError as e:
                 print("Error broadcasting message", e)
 
