@@ -1,4 +1,6 @@
-﻿namespace App.Enums;
+﻿using App.Exceptions;
+
+namespace App.Enums;
 
 public enum UserCommand
 {
@@ -22,6 +24,7 @@ public record UserCommandModel(UserCommand Command, string Content)
             // TODO: end is not a real command
             "/end" => new UserCommandModel(UserCommand.End, GetContent(command.Split(" "))),
             "/help" => new UserCommandModel(UserCommand.Help, GetContent(command.Split(" "))),
+            var s when s.StartsWith("/") => throw new InvalidInputException(ProtocolState.Auth),
             _ => new UserCommandModel(UserCommand.Message, command)
         };
 

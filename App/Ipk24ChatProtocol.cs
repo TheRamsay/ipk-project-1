@@ -27,7 +27,15 @@ public class Ipk24ChatProtocol
     public async Task Start()
     {
         _protocolState = new ProtocolStateBox(ProtocolState.Start);
-        await _transport.Start(_protocolState);
+        try
+        {
+            await _transport.Start(_protocolState);
+        }
+        catch (InvalidMessageReceivedException e)
+        {
+            await WaitForDelivered(_transport.Error(new ErrorModel() { Content = e.Message, DisplayName = _displayName }));
+            throw;
+        }
     }
     
     private async Task Auth(AuthModel data)
@@ -88,7 +96,7 @@ public class Ipk24ChatProtocol
                 _protocolState.SetState(ProtocolState.End);
                 break;
             default:
-                await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
+                // await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
                 throw new InvalidInputException(_protocolState.State);
         }
     }
@@ -115,6 +123,11 @@ public class Ipk24ChatProtocol
                 OnMessage?.Invoke(this, data);
                 break;
             case (ProtocolState.Open, ReplyModel data):
+                // We are currently not waiting for any reply, so we can ignore it
+                if (_messageProcessedSignal.CurrentCount != 0)
+                {
+                    break;
+                }
                 _messageProcessedSignal.Release();
                 OnMessage?.Invoke(this, data);
                 break;
@@ -122,15 +135,8 @@ public class Ipk24ChatProtocol
                 _protocolState.SetState(ProtocolState.End);
                 break;
             default:
-                _protocolState.SetState(ProtocolState.End);
-                break;
-        }
-        
-        if (_protocolState.State == ProtocolState.End)
-        {
-            await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
-            throw new Exception("Invalid state transition");
-            // await Disconnect();
+                // await _transport.Error(new ErrorModel() { Content = "Invalid state transition", DisplayName = _displayName});
+                throw new InvalidMessageReceivedException($"No action for {model} in state {_protocolState.State}");
         }
     }
     

@@ -1,4 +1,4 @@
-﻿namespace App.input;
+﻿namespace App.Input;
 
 public interface IStandardInputReader
 {

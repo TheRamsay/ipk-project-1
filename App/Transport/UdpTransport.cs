@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using App.Enums;
@@ -8,16 +9,10 @@ using App.Models.udp;
 
 namespace App.Transport;
 
-public class PendingMessage
-{
-    public required IModelWithId Model { get; set; }
-    public short Retries { get; set; }
-}
-
 public class UdpTransport : ITransport
 {
     private readonly CancellationToken _cancellationToken;
-    private UdpClient _client = new();
+    private readonly UdpClient _client = new();
     private readonly Options _options;
     private readonly HashSet<short> _processedMessages = new();
 
@@ -109,7 +104,14 @@ public class UdpTransport : ITransport
     public async Task Start(ProtocolStateBox protocolState)
     {
         _protocolState = protocolState;
-        _client.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
+        var ipv4 = (await Dns.GetHostAddressesAsync(_options.Host)).FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+        if (ipv4 == null)
+        {
+            throw new ServerUnreachableException("Invalid server address");
+        }
+        _client.Client.Bind(new IPEndPoint(ipv4, 0));
+        // _client.Connect(new IPEndPoint(ipv4, 0));
+        
         // Console.WriteLine(_client.Client.LocalEndPoint);
         // await Connect();
 
@@ -122,6 +124,16 @@ public class UdpTransport : ITransport
             var from = response.RemoteEndPoint;
             var receiveBuffer = response.Buffer;
             var parsedData = ParseMessage(receiveBuffer);
+
+            try
+            {
+                ModelValidator.Validate(parsedData);
+            }
+            catch (ValidationException e)
+            {
+                throw new InvalidMessageReceivedException($"Unable to validate received message: {e.Message}");
+            }
+            
             Console.WriteLine("Received message:" + parsedData.ToString());
             // var parsedData = ParseMessage(response);
 
@@ -132,12 +144,13 @@ public class UdpTransport : ITransport
 
             if (parsedData is IModelWithId modelWithId)
             {
+                // Received message is already processed, we just confirm it and continue
                 if (_processedMessages.Contains(modelWithId.Id))
                 {
                     await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
                     continue;
                 }
-
+                
                 await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
 
                 _processedMessages.Add(modelWithId.Id);
@@ -163,6 +176,7 @@ public class UdpTransport : ITransport
                     case UdpReplyModel data:
                         if (_protocolState.State == ProtocolState.Auth)
                         {
+                            // _client.Connect(_options.Host, from.Port);
                             _options.Port = (ushort)from.Port;
                             Console.WriteLine($"Reconnecting to different port for authenticated communication (PORT: ${from.Port})");
                             // _client.Client.Bind(new IPEndPoint(IPAddress.Any, 4568));
@@ -178,7 +192,7 @@ public class UdpTransport : ITransport
                         OnMessageReceived?.Invoke(this, new ByeModel());
                         break;
                     default:
-                        throw new InvalidMessageReceivedException(_protocolState.State);
+                        throw new InvalidMessageReceivedException("Unknown UDP message type");
                 }
             }
         }
@@ -188,20 +202,19 @@ public class UdpTransport : ITransport
     {
         var buffer = IBaseUdpModel.Serialize(data);
         
-        var ipv4 = Dns.GetHostAddresses(_options.Host).First(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+       var ipv4 = Dns.GetHostAddresses(_options.Host).First(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+        Console.WriteLine("Sending message to ip: " + ipv4 + " port: " + _options.Port);
         var sendTo = new IPEndPoint(ipv4, _options.Port);
-        Console.WriteLine("Sending message to ip: " + sendTo.Address + " port: " + sendTo.Port);
-        await _client.SendAsync(buffer);
+        await _client.SendAsync(buffer, sendTo);
 
         if (data is IModelWithId modelWithId)
         {
-            _pendingMessage = new PendingMessage { Model = modelWithId, Retries = 0 };
-            
+            // If it is first time sending this message, create a new pending message
+            _pendingMessage ??= new PendingMessage { Model = modelWithId, Retries = 0 };
+
             Task.Run(async () =>
             {
-                // Console.WriteLine($"Created timeout for message {modelWithId.Id}");
-                await Task.Delay(_options.Timeout);
-                // Console.WriteLine($"Timeout for message {modelWithId.Id} has expired");
+                await Task.Delay(_options.Timeout, _cancellationToken);
                 OnTimeoutExpired.Invoke(this, modelWithId);
             });
         }
@@ -214,26 +227,31 @@ public class UdpTransport : ITransport
 
     private void OnMessageConfirmedHandler(object? sender, UdpConfirmModel data)
     {
-        if (_pendingMessage?.Model.Id == data.RefMessageId)
+        if (_pendingMessage?.Model.Id != data.RefMessageId)
         {
-            OnMessageDelivered?.Invoke(this, EventArgs.Empty);
-            _pendingMessage = null;
+            // DD rekl ze toto se netestuje
+            // throw new TransportError("Received confirmation for unknown message");
+            return;
         }
+        
+        OnMessageDelivered?.Invoke(this, EventArgs.Empty);
+        _pendingMessage = null;
     }
 
     private async void OnTimeoutExpiredHandler(object? sender, IModelWithId data)
     {
         if (_pendingMessage?.Model.Id == data.Id)
         {
-            if (_pendingMessage.Retries < _options.RetryCount)
+            if (_pendingMessage?.Retries < _options.RetryCount)
             {
                 _pendingMessage.Retries++;
                 await Send((IBaseUdpModel)data);
             }
             else
             {
-                throw new TransportError("Max retries reached, message not delivered");
+                throw new ServerUnreachableException("Max retries reached, message not delivered");
             }
+
         }
     }
 }

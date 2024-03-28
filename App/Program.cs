@@ -2,7 +2,7 @@
 using System.Net.Sockets;
 using System.Text;
 using App.Enums;
-using App.input;
+using App.Input;
 using App.Models;
 using App.Models.udp;
 using App.Transport;
@@ -22,7 +22,7 @@ static class Program
     
     public static async Task RunClient(Options opt)
     {
-var source = new CancellationTokenSource();
+        var source = new CancellationTokenSource();
         
         ITransport transport;
         if (opt.Protocol == TransportProtocol.Udp)
@@ -42,9 +42,12 @@ var source = new CancellationTokenSource();
         {
             eventArgs.Cancel = true;
             Console.WriteLine("Exiting...");
-            // source.Cancel();
-            await client.Stop();
-            // await client._cancellationTokenSource.CancelAsync();
+            if (!client.Finished.Value)
+            {
+                client.Finished.Value = true;
+                await client.Stop();
+                await source.CancelAsync();
+            }
         };
         
         await client.Start();

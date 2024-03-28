@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using App.Enums;
 using App.Exceptions;
-using App.input;
+using App.Input;
 using App.Models;
 
 namespace App;
@@ -13,6 +13,8 @@ public class ChatClient
     private readonly IStandardInputReader _standardInputReader;
     
     private string _displayName = string.Empty;
+    
+    public ThreadSafeBool Finished { get; set; } = new(false);
 
     public ChatClient(Ipk24ChatProtocol protocol, IStandardInputReader standardInputReader, CancellationTokenSource cancellationTokenSource)
     {
@@ -36,13 +38,24 @@ public class ChatClient
         catch (OperationCanceledException e)
         {
             Console.WriteLine("ERR: Operation cancelled.");
+            return;
+        }
+        catch (ServerUnreachableException e)
+        {
+            Console.WriteLine($"ERR: {e.Message}");
+            return;
         }
         catch (Exception e)
         {
-            Console.WriteLine($"ERR: {e}");
+            Console.WriteLine($"ERR: {e.Message}");
+            await _protocol.Disconnect();
+            await _cancellationTokenSource.CancelAsync();
+            return;
         }
-        finally
+
+        if (!Finished.Value)
         {
+            Finished.Value = true;
             await _protocol.Disconnect();
             await _cancellationTokenSource.CancelAsync();
         }
@@ -66,6 +79,7 @@ public class ChatClient
             if (line is null)
             {
                 // await Stop();
+                Console.WriteLine("EOF reached.");
                 return;
             }
 
@@ -75,9 +89,9 @@ public class ChatClient
                 Console.WriteLine("ERR: Messages can't be empty.");
             }
 
-            var command = UserCommandModel.ParseCommand(line);
             try
             {
+                var command = UserCommandModel.ParseCommand(line);
                 await ProcessCommand(command);
             }
             catch (InvalidInputException e)

@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Net.Sockets;
 using System.Text;
 using App.Enums;
 using App.Exceptions;
@@ -44,12 +45,24 @@ public class TcpTransport : ITransport
             if (receivedBytes == 0)
             {
                 Console.WriteLine("Server has closed the connection");
-                break;
+                throw new ServerUnreachableException("Server has closed the connection");
             }
             
             var responseData = new ArraySegment<byte>(receiveBuffer, 0, receivedBytes).ToArray();
             var responseString = Encoding.UTF8.GetString(responseData);
-            OnMessageReceived?.Invoke(this, ParseMessage(responseString));
+            
+            var model = ParseMessage(responseString);
+
+            try
+            {
+                ModelValidator.Validate(model);
+            }
+            catch (ValidationException e)
+            {
+                throw new InvalidMessageReceivedException(e.Message);
+            }
+
+            OnMessageReceived?.Invoke(this, model);
         }
     }
 
@@ -113,7 +126,7 @@ public class TcpTransport : ITransport
             ["REPLY", var status, "IS", .. var content] => new ReplyModel()
                 { Status = status == "OK", Content = string.Join(" ", content) },
             ["BYE"] => new ByeModel(),
-            _ => throw new InvalidMessageReceivedException(_protocolState.State)
+            _ => throw new InvalidMessageReceivedException($"Unknown message type: {message}")
         };
     
     static string ReadUntilCrlf(StreamReader reader)

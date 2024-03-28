@@ -16,7 +16,7 @@ public interface IBaseUdpModel: IBaseModel
         foreach (var property in properties)
         {
             var propertyValue = property.GetValue(model);
-            Type propertyType = property.PropertyType;
+            var propertyType = property.PropertyType;
 
             if (propertyType == typeof(UdpMessageType))
             {
