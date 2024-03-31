@@ -5,7 +5,7 @@ namespace App;
 public class MessageQueue
 {
     private readonly Queue<Task> _messageQueue = new();
-    
+
     public int _semaphore = 0;
     private bool Enabled => _semaphore == 0;
 
@@ -17,19 +17,19 @@ public class MessageQueue
             _messageQueue.Enqueue(task);
             return;
         }
-        
+
         Console.WriteLine("Enqueued message, awaiting... locking the queue, semaphore: " + _semaphore);
         Lock();
         await task;
     }
-    
+
     public async Task DequeueMessageAsync()
     {
         if (IsEmpty() || !Enabled)
         {
             return;
         }
-        
+
         var message = _messageQueue.Dequeue();
         Console.WriteLine("Dequeued message, awaiting... locking the queue, semaphore: " + _semaphore);
         Lock();
@@ -40,12 +40,12 @@ public class MessageQueue
     {
         return _messageQueue.Count == 0;
     }
-    
+
     public void Unlock()
     {
         _semaphore--;
     }
-    
+
     public void Lock()
     {
         _semaphore++;
