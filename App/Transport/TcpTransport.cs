@@ -34,7 +34,7 @@ public class TcpTransport : ITransport
         ClientLogger.LogDebug("Connected to server");
 
         // TODO: uh oh 20_000
-        _stream.ReadTimeout = 20000;
+        // _stream.ReadTimeout = 20000;
 
         while (true)
         {

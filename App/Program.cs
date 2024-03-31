@@ -35,7 +35,7 @@ static class Program
             transport = new TcpTransport(opt, source.Token);
         }
 
-        var protocol = new Ipk24ChatProtocol(transport);
+        var protocol = new Ipk24ChatProtocol(transport, source);
 
         var client = new ChatClient(protocol, new StandardInputReader(), source);
 

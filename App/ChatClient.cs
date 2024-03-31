@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Net.Sockets;
 using App.Enums;
 using App.Exceptions;
@@ -11,7 +12,7 @@ namespace App;
 public class ChatClient
 {
     private readonly Ipk24ChatProtocol _protocol;
-    public readonly CancellationTokenSource _cancellationTokenSource;
+    private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly IStandardInputReader _standardInputReader;
     private readonly SemaphoreSlim _connectedSignal = new (0, 1);
     private string _displayName = string.Empty;
@@ -38,25 +39,15 @@ public class ChatClient
         {
             await await Task.WhenAny(transportTask, stdinTask);
         }
-        catch (OperationCanceledException e)
+        catch (OperationCanceledException)
         {
             ClientLogger.LogInternalError("Operation cancelled.");
-            return;
         }
-        catch (SocketException e)
+        catch (Exception e) when(e is ServerUnreachableException or SocketException)
         {
-            ClientLogger.LogInternalError("Operation cancelled.");
-            return;
-        }
-        catch (IOException e)
-        {
-            ClientLogger.LogInternalError("Operation cancelled.");
-            return;
-        }
-        catch (ServerUnreachableException e)
-        {
+            statusCode = 1;
+            Finished.Value = true;
             ClientLogger.LogInternalError(e.Message);
-            return;
         }
         catch (ServerException e)
         {
@@ -68,15 +59,18 @@ public class ChatClient
             statusCode = 1;
             ClientLogger.LogInternalError(e.Message);
         }
-
-        if (!Finished.Value)
+        finally
         {
-            Finished.Value = true;
-            await _protocol.Disconnect();
-            await _cancellationTokenSource.CancelAsync();
+            if (!Finished.Value)
+            {
+                Finished.Value = true;
+                await _protocol.Disconnect();
+                // Just to make sure 😏
+                await _cancellationTokenSource.CancelAsync();
+            }
+            
+            Environment.Exit(statusCode);
         }
-        
-        Environment.Exit(statusCode);
     }
 
     public async Task Stop()
@@ -112,11 +106,11 @@ public class ChatClient
                 var command = UserCommandModel.ParseCommand(line);
                 await ProcessCommand(command);
             }
-            catch (InvalidInputException e)
+            catch (InvalidInputException e) // User action is invalid, we don't want to crash the client, just log the error
             {
                 ClientLogger.LogInternalError($"{e.Message}");
             }
-            catch (ValidationException e)
+            catch (ValidationException e) // User input is invalid, we don't want to crash the client, just log the error
             {
                 ClientLogger.LogInternalError($"Invalid format, try /help to see the correct format (Reason: {e.Message})");
             }
@@ -148,6 +142,9 @@ public class ChatClient
                 ClientLogger.LogDebug($"Renamed to {((RenameModel)model).DisplayName}");
                 _displayName = ((RenameModel)model).DisplayName;
                 ClientLogger.LogDebug($"New name is {_displayName}");
+                break;
+            case UserCommand.Help:
+                Console.WriteLine("Commands:");
                 break;
             default:
                 throw new ValidationException("Invalid command, try /help to see the correct format.");

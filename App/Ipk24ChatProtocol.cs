@@ -11,17 +11,20 @@ public class Ipk24ChatProtocol
     private readonly SemaphoreSlim _messageDeliveredSignal = new(0, 1);
     private readonly SemaphoreSlim _messageProcessedSignal = new(0, 1);
     private readonly SemaphoreSlim _endSignal = new(0, 1);
-    private Exception? ExceptionToThrow;
+    private readonly CancellationTokenSource _cancellationTokenSource;
+    private Exception? _exceptionToThrow;
 
     private ProtocolStateBox _protocolState;
-    private readonly string _displayName = "Pepa";
+    // TODO: ⚠️
+    private const string DisplayName = "Pepa";
 
     public event EventHandler<IBaseModel>? OnMessage;
     public event EventHandler OnConnected;
     
-    public Ipk24ChatProtocol(ITransport transport)
+    public Ipk24ChatProtocol(ITransport transport, CancellationTokenSource cancellationTokenSource)
     {
         _transport = transport;
+        _cancellationTokenSource = cancellationTokenSource;
 
         // Event subscription
         _transport.OnMessageReceived += OnMessageReceived;
@@ -36,9 +39,9 @@ public class Ipk24ChatProtocol
         {
             await await Task.WhenAny(_transport.Start(_protocolState), CheckErrors());
         }
-        catch (InvalidMessageReceivedException e)
+        catch (InvalidMessageReceivedException e) // If server sends a malformed message, send ERR, BYE and disconnect
         {
-            await WaitForDelivered(_transport.Error(new ErrorModel { Content = e.Message, DisplayName = _displayName }));
+            await WaitForDelivered(_transport.Error(new ErrorModel { Content = e.Message, DisplayName = DisplayName }));
             throw;
         }
     }
@@ -62,6 +65,7 @@ public class Ipk24ChatProtocol
     {
         // Send bye, wait for delivered and disconnect
         await WaitForDelivered(_transport.Bye());
+        await _cancellationTokenSource.CancelAsync();
         _transport.Disconnect();
     }
 
@@ -109,9 +113,9 @@ public class Ipk24ChatProtocol
         await _endSignal.WaitAsync();
         ClientLogger.LogDebug("Received end signal");
         
-        if (ExceptionToThrow is not null)
+        if (_exceptionToThrow is not null)
         {
-            throw ExceptionToThrow;
+            throw _exceptionToThrow;
         }
     }
     
@@ -130,7 +134,7 @@ public class Ipk24ChatProtocol
                 OnMessage?.Invoke(this, data);
                 break;
             case (ProtocolState.Open or ProtocolState.Auth, ErrorModel data):
-                ExceptionToThrow = new ServerException(data);
+                _exceptionToThrow = new ServerException(data);
                 _protocolState.SetState(ProtocolState.End);
                 break;
             case (ProtocolState.Open, MessageModel data):
@@ -149,7 +153,7 @@ public class Ipk24ChatProtocol
                 _protocolState.SetState(ProtocolState.End);
                 break;
             default:
-                ExceptionToThrow = new InvalidMessageReceivedException($"No action for {model} in state {_protocolState.State}");
+                _exceptionToThrow = new InvalidMessageReceivedException($"No action for {model} in state {_protocolState.State}");
                 _protocolState.SetState(ProtocolState.End);
                 break;
         }
