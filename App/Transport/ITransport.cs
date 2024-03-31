@@ -7,7 +7,8 @@ public interface ITransport
 {
     public event EventHandler<IBaseModel> OnMessageReceived;
     public event EventHandler OnMessageDelivered;
-    
+    public event EventHandler OnConnected;
+
     public Task Auth(AuthModel data);
     public Task Join(JoinModel data);
     public Task Message(MessageModel data);

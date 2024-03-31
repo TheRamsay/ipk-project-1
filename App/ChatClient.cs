@@ -1,4 +1,6 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System.Collections.Concurrent;
+using System.ComponentModel.DataAnnotations;
+using System.Net.Sockets;
 using App.Enums;
 using App.Exceptions;
 using App.Input;
@@ -11,7 +13,7 @@ public class ChatClient
     private readonly Ipk24ChatProtocol _protocol;
     public readonly CancellationTokenSource _cancellationTokenSource;
     private readonly IStandardInputReader _standardInputReader;
-    
+    private readonly SemaphoreSlim _connectedSignal = new (0, 1);
     private string _displayName = string.Empty;
     
     public ThreadSafeBool Finished { get; set; } = new(false);
@@ -22,35 +24,49 @@ public class ChatClient
         _protocol = protocol;
         _standardInputReader = standardInputReader;
         
-        // Event subscription
         _protocol.OnMessage += OnMessageReceived;
+        _protocol.OnConnected += OnConnected;
     }
 
     public async Task Start()
     {
-        Task transportTask = _protocol.Start();
-        Task stdinTask = ReadInputAsync();
-        
+        var transportTask = _protocol.Start();
+        var stdinTask = ReadInputAsync();
+        var statusCode = 0;
+
         try
         {
             await await Task.WhenAny(transportTask, stdinTask);
         }
         catch (OperationCanceledException e)
         {
-            Console.WriteLine("ERR: Operation cancelled.");
+            ClientLogger.LogInternalError("Operation cancelled.");
+            return;
+        }
+        catch (SocketException e)
+        {
+            ClientLogger.LogInternalError("Operation cancelled.");
+            return;
+        }
+        catch (IOException e)
+        {
+            ClientLogger.LogInternalError("Operation cancelled.");
             return;
         }
         catch (ServerUnreachableException e)
         {
-            Console.WriteLine($"ERR: {e.Message}");
+            ClientLogger.LogInternalError(e.Message);
             return;
+        }
+        catch (ServerException e)
+        {
+            statusCode = 1;
+            ClientLogger.LogError(e.ErrorData);
         }
         catch (Exception e)
         {
-            Console.WriteLine($"ERR: {e.Message}");
-            await _protocol.Disconnect();
-            await _cancellationTokenSource.CancelAsync();
-            return;
+            statusCode = 1;
+            ClientLogger.LogInternalError(e.Message);
         }
 
         if (!Finished.Value)
@@ -59,18 +75,20 @@ public class ChatClient
             await _protocol.Disconnect();
             await _cancellationTokenSource.CancelAsync();
         }
+        
+        Environment.Exit(statusCode);
     }
-    
+
     public async Task Stop()
     {
-        Console.WriteLine("Disconnecting...");
+        ClientLogger.LogDebug("Disconnecting...");
         await _protocol.Disconnect();
-        Console.WriteLine("Cancelling the token...");
-        await _cancellationTokenSource.CancelAsync();
     }
-    
+
     private async Task ReadInputAsync()
     {
+        await _connectedSignal.WaitAsync();
+        
         while (!_cancellationTokenSource.Token.IsCancellationRequested)
         {
             var line = _standardInputReader.ReadLine();
@@ -79,14 +97,14 @@ public class ChatClient
             if (line is null)
             {
                 // await Stop();
-                Console.WriteLine("EOF reached.");
+                ClientLogger.LogDebug("EOF reached");
                 return;
             }
 
             // Empty line not allowed
             if (line.Length == 0)
             {
-                Console.WriteLine("ERR: Messages can't be empty.");
+                ClientLogger.LogInternalError("Messages can't be empty.");
             }
 
             try
@@ -96,15 +114,13 @@ public class ChatClient
             }
             catch (InvalidInputException e)
             {
-                Console.WriteLine($"ERR: {e.Message}");
+                ClientLogger.LogInternalError($"{e.Message}");
             }
             catch (ValidationException e)
             {
-                Console.WriteLine($"ERR: Invalid format, try /help to see the correct format (Reason: {e.Message})");
+                ClientLogger.LogInternalError($"Invalid format, try /help to see the correct format (Reason: {e.Message})");
             }
         }
-        
-        Console.WriteLine("Exiting loop...");
     }
 
     private async Task ProcessCommand(UserCommandModel command)
@@ -114,21 +130,24 @@ public class ChatClient
         {
             case UserCommand.Auth:
                 model = AuthModel.Parse(command.Content);
-                _displayName = ((AuthModel) model).DisplayName;
+                _displayName = ((AuthModel)model).DisplayName;
                 await _protocol.Send(model);
                 break;
             case UserCommand.Join:
                 model = JoinModel.Parse(command.Content);
+                ((JoinModel)model).DisplayName = _displayName;
                 await _protocol.Send(model);
                 break;
             case UserCommand.Message:
                 model = MessageModel.Parse(command.Content);
-                ((MessageModel) model).DisplayName = _displayName;
+                ((MessageModel)model).DisplayName = _displayName;
                 await _protocol.Send(model);
                 break;
             case UserCommand.Rename:
                 model = RenameModel.Parse(command.Content);
-                _displayName = ((RenameModel) model).DisplayName;
+                ClientLogger.LogDebug($"Renamed to {((RenameModel)model).DisplayName}");
+                _displayName = ((RenameModel)model).DisplayName;
+                ClientLogger.LogDebug($"New name is {_displayName}");
                 break;
             default:
                 throw new ValidationException("Invalid command, try /help to see the correct format.");
@@ -137,15 +156,23 @@ public class ChatClient
 
     private void OnMessageReceived(object? sender, IBaseModel model)
     {
+        // throw new Exception("ZMRD MFEKFWEE");
         if (model is MessageModel message)
         {
-            Console.WriteLine($"{message.DisplayName}: {message.Content}");
-        } else if (model is ReplyModel reply)
-        {
-            Console.WriteLine(reply.Status ? $"Success: {reply.Content}" : $"Failure: {reply.Content}");
-        } else if (model is ErrorModel error)
-        {
-            Console.WriteLine($"ERR FROM: {error.Content}");
+            ClientLogger.LogMessage(message);
         }
+        else if (model is ReplyModel reply)
+        {
+            ClientLogger.LogReploy(reply);
+        }
+        else if (model is ErrorModel error)
+        {
+            ClientLogger.LogError(error);
+        }
+    }
+
+    private void OnConnected(object? sender, EventArgs args)
+    {
+        _connectedSignal.Release();
     }
 }
