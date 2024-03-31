@@ -2,7 +2,7 @@
 
 namespace App.Models.udp;
 
-public class UdpReplyModel: IBaseUdpModel, IModelWithId
+public class UdpReplyModel : IBaseUdpModel, IModelWithId
 {
     public UdpMessageType MessageType { get; set; } = UdpMessageType.Reply;
     public short Id { get; set; }
@@ -11,6 +11,6 @@ public class UdpReplyModel: IBaseUdpModel, IModelWithId
     public string Content { get; set; }
     public UdpReplyModel()
     {
-            
+
     }
 }

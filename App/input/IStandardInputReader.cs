@@ -2,5 +2,5 @@
 
 public interface IStandardInputReader
 {
-   string? ReadLine(); 
+    string? ReadLine();
 }

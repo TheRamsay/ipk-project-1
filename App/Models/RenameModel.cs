@@ -7,7 +7,7 @@ public class RenameModel : IBaseModel, IParsable
 {
     [RegularExpression("[!-~]{1,20}", ErrorMessage = "DisplayName has to have printable characters with length from 1 to 128 characters")]
     public required string DisplayName { get; set; }
-    
+
     public static RenameModel Parse(string data)
     {
         var parts = data.Split(' ');
@@ -17,14 +17,14 @@ public class RenameModel : IBaseModel, IParsable
             throw new ValidationException(
                 "/rename command has to have 1 part separated by space. Example: /rename displayName");
         }
-        
+
         var model = new RenameModel
         {
             DisplayName = parts[0]
         };
-        
+
         ModelValidator.Validate(model);
-        
+
         return model;
     }
 }

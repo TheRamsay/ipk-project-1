@@ -1,9 +1,10 @@
-﻿using System.Text;
+﻿using System.Net;
+using System.Text;
 using App.Enums;
 
 namespace App.Models.udp;
 
-public interface IBaseUdpModel: IBaseModel
+public interface IBaseUdpModel : IBaseModel
 {
     public UdpMessageType MessageType { get; set; }
     public static byte[] Serialize(IBaseUdpModel model)
@@ -12,7 +13,7 @@ public interface IBaseUdpModel: IBaseModel
 
         using var memoryStream = new MemoryStream();
         using var binaryWriter = new BinaryWriter(memoryStream);
-        
+
         foreach (var property in properties)
         {
             var propertyValue = property.GetValue(model);
@@ -21,20 +22,17 @@ public interface IBaseUdpModel: IBaseModel
             if (propertyType == typeof(UdpMessageType))
             {
                 binaryWriter.Write((byte)propertyValue);
-            } 
+            }
             else if (propertyType == typeof(string))
             {
                 var strData = Encoding.ASCII.GetBytes((string)propertyValue);
                 binaryWriter.Write(strData);
                 binaryWriter.Write((byte)0);
             }
-            else if (propertyType == typeof(int))
-            {
-                binaryWriter.Write((int)propertyValue);
-            }
             else if (propertyType == typeof(short))
             {
-                binaryWriter.Write((short)propertyValue);
+                var ble = BitConverter.GetBytes((short)propertyValue!).Reverse().ToArray();
+                binaryWriter.Write(ble);
             }
             else
             {
@@ -45,7 +43,7 @@ public interface IBaseUdpModel: IBaseModel
 
         return memoryStream.ToArray();
     }
-    
+
     public static IBaseUdpModel Deserialize(byte[] data)
     {
         var messageTypeToModel = new Dictionary<UdpMessageType, Type>
@@ -61,21 +59,21 @@ public interface IBaseUdpModel: IBaseModel
 
         Type modelType = messageTypeToModel[(UdpMessageType)data[0]];
         var model = (IBaseUdpModel)Activator.CreateInstance(modelType);
-        
+
         using var memoryStream = new MemoryStream(data);
         using var binaryReader = new BinaryReader(memoryStream);
-        
+
         var properties = modelType.GetProperties();
 
         foreach (var property in properties)
         {
 
             Type propertyType = property.PropertyType;
-            
+
             if (propertyType == typeof(UdpMessageType))
             {
                 property.SetValue(model, (UdpMessageType)binaryReader.ReadByte());
-            } 
+            }
             else if (propertyType == typeof(string))
             {
                 var byteList = new List<byte>();
@@ -92,15 +90,13 @@ public interface IBaseUdpModel: IBaseModel
 
                 var strValue = Encoding.ASCII.GetString(byteList.ToArray());
                 property.SetValue(model, strValue);
-            } 
-            else if (propertyType == typeof(int))
-            {
-                property.SetValue(model, binaryReader.ReadInt32());
-            } 
+            }
             else if (propertyType == typeof(short))
             {
-                property.SetValue(model, binaryReader.ReadInt16());
-            } else if (propertyType == typeof(bool))
+                var x = IPAddress.NetworkToHostOrder(binaryReader.ReadInt16());
+                property.SetValue(model, x);
+            }
+            else if (propertyType == typeof(bool))
             {
                 property.SetValue(model, binaryReader.ReadBoolean());
             }

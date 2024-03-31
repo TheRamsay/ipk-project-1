@@ -2,7 +2,7 @@
 
 namespace App.Models.udp;
 
-public class UdpErrorModel: IBaseUdpModel, IModelWithId
+public class UdpErrorModel : IBaseUdpModel, IModelWithId
 {
     public UdpMessageType MessageType { get; set; } = UdpMessageType.Err;
     public short Id { get; set; }
