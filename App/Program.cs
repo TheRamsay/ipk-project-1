@@ -20,7 +20,7 @@ static class Program
             .ParseArguments<Options>(args)
             .WithParsed(o => RunClient(o).Wait());
     }
-    
+
     static async Task<string?> ReadUntilCrlf(Stream _stream)
     {
         if (_stream is null)
@@ -46,7 +46,7 @@ static class Program
 
         return null;
     }
- 
+
 
     public static async Task RunClient(Options opt)
     {

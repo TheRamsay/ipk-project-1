@@ -27,14 +27,14 @@ public class UdpTransport : ITransport
     public event EventHandler? OnConnected;
     public event EventHandler<IModelWithId> OnTimeoutExpired;
     public event EventHandler? OnMessageDelivered;
-    
+
     private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
 
     public UdpTransport(Options options, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
         _options = options;
-        
+
         // Event subscription
         OnMessageConfirmed += OnMessageConfirmedHandler;
         OnTimeoutExpired += OnTimeoutExpiredHandler;
@@ -79,7 +79,7 @@ public class UdpTransport : ITransport
     {
         _protocolState = protocolState;
         OnConnected?.Invoke(this, EventArgs.Empty);
-        
+
         // Wait until receiving loop is finished or retry count is exceeded
         await await Task.WhenAny(Receive(), RetryExceededHandler());
     }
@@ -92,7 +92,7 @@ public class UdpTransport : ITransport
             throw new ServerUnreachableException("Invalid server address");
         }
         _client.Client.Bind(new IPEndPoint(ipv4, 0));
-        
+
         while (!_cancellationToken.IsCancellationRequested)
         {
             ClientLogger.LogDebug("Waiting for message...");
@@ -123,21 +123,21 @@ public class UdpTransport : ITransport
                     continue;
                 // If we haven't processed this message yet, confirm it and process it
                 case IModelWithId modelWithId:
-                {
-                    var model = parsedData.ToBaseModel();
-                    
-                    // After authentication, we need to reconnect to a different port, for private communication
-                    if (model is ReplyModel && _protocolState.State is ProtocolState.Auth)
                     {
-                        _options.Port = (ushort)from.Port;
-                        ClientLogger.LogDebug($"Reconnecting to different port for authenticated communication (PORT: ${from.Port})");
-                    }
+                        var model = parsedData.ToBaseModel();
 
-                    await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
-                    _processedMessages.Add(modelWithId.Id);
-                    OnMessageReceived?.Invoke(this, model);
-                    break;
-                }
+                        // After authentication, we need to reconnect to a different port, for private communication
+                        if (model is ReplyModel && _protocolState.State is ProtocolState.Auth)
+                        {
+                            _options.Port = (ushort)from.Port;
+                            ClientLogger.LogDebug($"Reconnecting to different port for authenticated communication (PORT: ${from.Port})");
+                        }
+
+                        await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
+                        _processedMessages.Add(modelWithId.Id);
+                        OnMessageReceived?.Invoke(this, model);
+                        break;
+                    }
             }
         }
     }
@@ -192,7 +192,7 @@ public class UdpTransport : ITransport
         {
             return;
         }
-        
+
         // If we haven't exceeded the retry count, retry the message
         if (_pendingMessage?.Retries < _options.RetryCount)
         {

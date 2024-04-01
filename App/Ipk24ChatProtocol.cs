@@ -16,7 +16,7 @@ public class Ipk24ChatProtocol
     private readonly SemaphoreSlim _endSignal = new(0, 1);
     // Used for cancelling the message receive loop
     private readonly CancellationTokenSource _cancellationTokenSource;
-    
+
     private Exception? _exceptionToThrow;
     private ProtocolStateBox? _protocolState;
     // TODO: ⚠️
@@ -24,7 +24,7 @@ public class Ipk24ChatProtocol
 
     public event EventHandler<IBaseModel>? OnMessage;
     public event EventHandler? OnConnected;
-    
+
     public Ipk24ChatProtocol(ITransport transport, CancellationTokenSource cancellationTokenSource)
     {
         _transport = transport;
@@ -39,7 +39,7 @@ public class Ipk24ChatProtocol
     public async Task Start()
     {
         _protocolState = new ProtocolStateBox(ProtocolState.Start);
-        
+
         try
         {
             // Start the receive loop
@@ -52,15 +52,16 @@ public class Ipk24ChatProtocol
             // The ProtocolEnHandler function is used for throwing exceptions from EventHandlers
             // This is necessary because the exceptions thrown in EventHandlers are not caught by the try-catch block
             await await Task.WhenAny(_transport.Start(_protocolState), ProtocolEndHandler());
-        } 
+        }
         // If server sends a malformed message, send ERR, BYE and disconnect
         catch (InvalidMessageReceivedException e)
         {
             var errorModel = new ErrorModel
             {
-                Content = e.Message, DisplayName = DisplayName
+                Content = e.Message,
+                DisplayName = DisplayName
             };
-            
+
             await SendInternal(_transport.Error(errorModel));
             // Exception is rethrown for proper ending of the protocol in the ChatClient
             throw;
@@ -107,7 +108,7 @@ public class Ipk24ChatProtocol
         ClientLogger.LogDebug("Waiting for end signal");
         await _endSignal.WaitAsync();
         ClientLogger.LogDebug("Received end signal");
-        
+
         if (_exceptionToThrow is not null)
         {
             throw _exceptionToThrow;
@@ -131,14 +132,14 @@ public class Ipk24ChatProtocol
             await WaitForDelivered(task);
         }
     }
-    
+
     public async Task Send(IBaseModel model)
     {
         if (_protocolState is null)
         {
             throw new InternalException("Protocol not started");
         }
-        
+
         switch (_protocolState.State, model)
         {
             case (ProtocolState.Start, AuthModel data):
@@ -163,14 +164,14 @@ public class Ipk24ChatProtocol
         }
     }
 
-    
+
     private void Receive(IBaseModel model)
     {
         if (_protocolState is null)
         {
             throw new InternalException("Protocol not started");
         }
-        
+
         switch (_protocolState.State, model)
         {
             case (ProtocolState.Auth, ReplyModel { Status: true } data):
@@ -225,8 +226,8 @@ public class Ipk24ChatProtocol
         }
         catch (Exception e)
         {
-           _exceptionToThrow = e;
-           _endSignal.Release();
+            _exceptionToThrow = e;
+            _endSignal.Release();
         }
     }
 
@@ -238,11 +239,11 @@ public class Ipk24ChatProtocol
         }
         catch (Exception e)
         {
-           _exceptionToThrow = e;
-           _endSignal.Release();
+            _exceptionToThrow = e;
+            _endSignal.Release();
         }
     }
-    
+
     private void OnConnectedHandler(object? sender, EventArgs args)
     {
         try

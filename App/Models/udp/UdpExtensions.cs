@@ -10,7 +10,9 @@ public static class UdpExtensions
         {
             UdpAuthModel data => new AuthModel
             {
-                DisplayName = data.DisplayName, Secret = data.Secret, Username = data.Username
+                DisplayName = data.DisplayName,
+                Secret = data.Secret,
+                Username = data.Username
             },
             UdpJoinModel data => new JoinModel { ChannelId = data.ChannelId, DisplayName = data.DisplayName },
             UdpMessageModel data => new MessageModel { Content = data.Content, DisplayName = data.DisplayName },
@@ -20,18 +22,21 @@ public static class UdpExtensions
             _ => throw new InvalidMessageReceivedException("Unknown UDP message type")
         };
     }
-    
+
     public static IBaseUdpModel ToUdpModel(this IBaseModel baseModel, short messageId)
     {
         return baseModel switch
         {
             AuthModel data => new UdpAuthModel
             {
-                DisplayName = data.DisplayName, Secret = data.Secret, Username = data.Username, Id = messageId
+                DisplayName = data.DisplayName,
+                Secret = data.Secret,
+                Username = data.Username,
+                Id = messageId
             },
-            JoinModel data => new UdpJoinModel { ChannelId = data.ChannelId, DisplayName = data.DisplayName, Id = messageId},
-            MessageModel data => new UdpMessageModel { Content = data.Content, DisplayName = data.DisplayName, Id = messageId},
-            ErrorModel data => new UdpErrorModel { Content = data.Content, DisplayName = data.DisplayName, Id = messageId},
+            JoinModel data => new UdpJoinModel { ChannelId = data.ChannelId, DisplayName = data.DisplayName, Id = messageId },
+            MessageModel data => new UdpMessageModel { Content = data.Content, DisplayName = data.DisplayName, Id = messageId },
+            ErrorModel data => new UdpErrorModel { Content = data.Content, DisplayName = data.DisplayName, Id = messageId },
             ReplyModel data => new UdpReplyModel { Content = data.Content, Status = data.Status, Id = messageId },
             ByeModel _ => new UdpByeModel { Id = messageId },
             _ => throw new InvalidMessageReceivedException("Unknown base model type")

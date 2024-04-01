@@ -118,19 +118,24 @@ public class TcpTransport : ITransport
             ["JOIN", _, "AS", _] => new JoinModel { ChannelId = parts[1], DisplayName = parts[3] },
             ["AUTH", _, "AS", _, "USING", _] => new AuthModel
             {
-                Username = parts[1], Secret = parts[3], DisplayName = parts[5]
+                Username = parts[1],
+                Secret = parts[3],
+                DisplayName = parts[5]
             },
             ["MSG", "FROM", _, "IS", ..] => new MessageModel
             {
-                DisplayName = parts[2], Content = string.Join(" ", parts.Skip(4))
+                DisplayName = parts[2],
+                Content = string.Join(" ", parts.Skip(4))
             },
             ["ERR", "FROM", _, "IS", ..] => new ErrorModel
             {
-                DisplayName = parts[2], Content = string.Join(" ", parts.Skip(4))
+                DisplayName = parts[2],
+                Content = string.Join(" ", parts.Skip(4))
             },
             ["REPLY", _, "IS", ..] => new ReplyModel
             {
-                Status = parts[1] == "OK", Content = string.Join(" ", parts.Skip(3))
+                Status = parts[1] == "OK",
+                Content = string.Join(" ", parts.Skip(3))
             },
             ["BYE"] => new ByeModel(),
             _ => throw new InvalidMessageReceivedException($"Unknown message type: {message}")
@@ -159,7 +164,7 @@ public class TcpTransport : ITransport
             sb.Append((char)currChar);
             prevChar = currChar;
         }
-        
+
         // If we reach the end of the stream and no valid message was found, return null
         return null;
     }

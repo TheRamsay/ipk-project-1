@@ -14,9 +14,9 @@ public class ChatClient
     private readonly Ipk24ChatProtocol _protocol;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly IStandardInputReader _standardInputReader;
-    private readonly SemaphoreSlim _connectedSignal = new (0, 1);
+    private readonly SemaphoreSlim _connectedSignal = new(0, 1);
     private string _displayName = string.Empty;
-    
+
     public ThreadSafeBool Finished { get; set; } = new(false);
 
     public ChatClient(Ipk24ChatProtocol protocol, IStandardInputReader standardInputReader, CancellationTokenSource cancellationTokenSource)
@@ -24,7 +24,7 @@ public class ChatClient
         _cancellationTokenSource = cancellationTokenSource;
         _protocol = protocol;
         _standardInputReader = standardInputReader;
-        
+
         _protocol.OnMessage += OnMessageReceivedHandler;
         _protocol.OnConnected += OnConnectedHandler;
     }
@@ -43,7 +43,7 @@ public class ChatClient
         {
             ClientLogger.LogInternalError("Operation cancelled.");
         }
-        catch (Exception e) when(e is ServerUnreachableException or SocketException)
+        catch (Exception e) when (e is ServerUnreachableException or SocketException)
         {
             statusCode = 1;
             Finished.Value = true;
@@ -68,7 +68,7 @@ public class ChatClient
                 // Just to make sure 😏
                 await _cancellationTokenSource.CancelAsync();
             }
-            
+
             Environment.Exit(statusCode);
         }
     }
@@ -82,7 +82,7 @@ public class ChatClient
     private async Task ReadInputAsync()
     {
         await _connectedSignal.WaitAsync();
-        
+
         while (!_cancellationTokenSource.Token.IsCancellationRequested)
         {
             var line = _standardInputReader.ReadLine();
