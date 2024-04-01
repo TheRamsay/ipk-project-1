@@ -103,6 +103,12 @@ public class UdpTransport : ITransport
             var dataBuffer = response.Buffer;
             var parsedData = ParseMessage(dataBuffer);
 
+            if (parsedData is UdpConfirmModel confirmModel)
+            {
+                OnMessageConfirmed?.Invoke(this, confirmModel);
+                continue;
+            }
+            
             try
             {
                 ModelValidator.Validate(parsedData.ToBaseModel());
@@ -116,9 +122,6 @@ public class UdpTransport : ITransport
 
             switch (parsedData)
             {
-                case UdpConfirmModel confirmModel:
-                    OnMessageConfirmed?.Invoke(this, confirmModel);
-                    break;
                 // If we have already processed this message, just confirm it and continue
                 case IModelWithId modelWithId when _processedMessages.Contains(modelWithId.Id):
                     await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });

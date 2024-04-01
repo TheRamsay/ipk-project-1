@@ -19,7 +19,7 @@ public static class UdpExtensions
             UdpErrorModel data => new ErrorModel { Content = data.Content, DisplayName = data.DisplayName },
             UdpReplyModel data => new ReplyModel { Content = data.Content, Status = data.Status },
             UdpByeModel _ => new ByeModel(),
-            _ => throw new InvalidMessageReceivedException("Unknown UDP message type")
+            _ => throw new InvalidMessageReceivedException($"Unknown UDP message type {udpModel}")
         };
     }
 
