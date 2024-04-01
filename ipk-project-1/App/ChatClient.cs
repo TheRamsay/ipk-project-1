@@ -15,7 +15,7 @@ public class ChatClient
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly IStandardInputReader _standardInputReader;
     private readonly SemaphoreSlim _connectedSignal = new(0, 1);
-    
+
     private string _displayName = string.Empty;
 
     public ThreadSafeBool Finished { get; set; } = new(false);
@@ -76,7 +76,7 @@ public class ChatClient
                 await _cancellationTokenSource.CancelAsync();
             }
         }
-        
+
         return statusCode;
     }
 

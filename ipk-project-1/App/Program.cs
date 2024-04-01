@@ -1,15 +1,7 @@
-﻿using System.Net;
-using System.Net.Sockets;
-using System.Reflection.Metadata;
-using System.Text;
-using App.Enums;
-using App.Exceptions;
+﻿using App.Enums;
 using App.Input;
-using App.Models;
-using App.Models.udp;
 using App.Transport;
 using CommandLine;
-using Serilog;
 
 namespace App;
 static class Program
@@ -17,34 +9,34 @@ static class Program
     static async Task<int> Main(string[] args)
     {
         var statusCode = 0;
-        
-       if (args.Any(arg => arg is "-h" or "--help"))
-       {
-           PrintHelp();
-           return statusCode;
-       }
 
-       new Parser(with => with.CaseInsensitiveEnumValues = true)
-            .ParseArguments<Options>(args)
-            .WithParsed(o => RunClient(o).Wait())
-           .WithNotParsed(errors =>
-           {
-               foreach (var error in errors)
-               {
-                   if (error is HelpRequestedError or VersionRequestedError)
-                   {
-                       PrintHelp();
-                   }
-                   else
-                   {
-                       ClientLogger.LogInternalError(error.ToString() ?? string.Empty);
-                   }
-               }
+        if (args.Any(arg => arg is "-h" or "--help"))
+        {
+            PrintHelp();
+            return statusCode;
+        }
 
-               statusCode = 1;
-           });
+        new Parser(with => with.CaseInsensitiveEnumValues = true)
+             .ParseArguments<Options>(args)
+             .WithParsed(o => RunClient(o).Wait())
+            .WithNotParsed(errors =>
+            {
+                foreach (var error in errors)
+                {
+                    if (error is HelpRequestedError or VersionRequestedError)
+                    {
+                        PrintHelp();
+                    }
+                    else
+                    {
+                        ClientLogger.LogInternalError(error.ToString() ?? string.Empty);
+                    }
+                }
 
-       return statusCode;
+                statusCode = 1;
+            });
+
+        return statusCode;
     }
 
     public static async Task RunClient(Options opt)
@@ -88,6 +80,6 @@ static class Program
         Console.WriteLine("  -p <port_number>\tServer port (default: 4567)");
         Console.WriteLine("  -d <timeout_value>\tUDP confirmation timeout (default: 250)");
         Console.WriteLine("  -r <num_retransmissions>\tMaximum number of UDP retransmissions (default: 3)");
-        Console.WriteLine("  -h, --help\tPrints program help output and exits");    
+        Console.WriteLine("  -h, --help\tPrints program help output and exits");
     }
 }

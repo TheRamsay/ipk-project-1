@@ -16,12 +16,12 @@ public class RenameModelTests
         {
             DisplayName = "Pepa_z_Brna",
         };
-        
+
         // Act & Assert
         var exception = Record.Exception(() => ModelValidator.Validate(model));
         Assert.Null(exception);
-    } 
-    
+    }
+
     [Fact]
     public void RenameModel_DisplayNameTooLong()
     {
@@ -30,11 +30,11 @@ public class RenameModelTests
         {
             DisplayName = "a".PadRight(129, 'a'),
         };
-        
+
         // Act & Assert
         Assert.Throws<ValidationException>(() => ModelValidator.Validate(model));
-    } 
-    
+    }
+
     [Fact]
     public void RenameModel_DisplayNameInvalidCharacters()
     {
@@ -44,30 +44,30 @@ public class RenameModelTests
             // DisplayName doesn't allow diacritics
             DisplayName = "Pepík_z_Brna",
         };
-        
+
         // Act & Assert
         Assert.Throws<ValidationException>(() => ModelValidator.Validate(model));
-    } 
-    
+    }
+
     [Fact]
     public void RenameModel_CommandValid()
     {
         // Arrange
         var data = "Pepa_z_Brna";
-        
+
         // Act
         var model = RenameModel.Parse(data);
-        
+
         // Assert
         Assert.Equal("Pepa_z_Brna", model.DisplayName);
     }
-    
+
     [Fact]
     public void RenameModel_CommandInvalid()
     {
         // Arrange
         var data = "lól XD omegalul";
-        
+
         // Act & Assert
         Assert.Throws<ValidationException>(() => RenameModel.Parse(data));
     }

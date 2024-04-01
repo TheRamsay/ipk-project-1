@@ -77,7 +77,7 @@ class UdpServer:
             if not isinstance(decoded_message, ConfirmMessage):
                 if decoded_message.message_id == 0:
                     print("Sleeping for 0.6 seconds")
-                    time.sleep(0.5)
+                    #time.sleep(0.5)
 
                 print("BLEEEE")
                 self.confirm_message(decoded_message.message_id, client_address)

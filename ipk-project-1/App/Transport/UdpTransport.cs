@@ -87,10 +87,10 @@ public class UdpTransport : ITransport
 
     private async Task Receive()
     {
-        var ipv4= await GetIpAddress(_options.Host);
+        var ipv4 = await GetIpAddress(_options.Host);
 
         _ipAddress = ipv4 ?? throw new ServerUnreachableException("Invalid server address");
-        
+
         // UDP client is listening on all ports
         _client.Client.Bind(new IPEndPoint(_ipAddress, 0));
 
@@ -107,7 +107,7 @@ public class UdpTransport : ITransport
                 OnMessageConfirmed?.Invoke(this, confirmModel);
                 continue;
             }
-            
+
             try
             {
                 ModelValidator.Validate(parsedData.ToBaseModel());
