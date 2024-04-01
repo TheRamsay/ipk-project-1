@@ -154,7 +154,7 @@ public class ChatClient
                 ClientLogger.LogDebug($"New name is {_displayName}");
                 break;
             case UserCommand.Help:
-                Console.WriteLine("Commands:");
+                Program.PrintHelp();
                 break;
             default:
                 throw new ValidationException("Invalid command, try /help to see the correct format.");

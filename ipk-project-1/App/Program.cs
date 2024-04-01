@@ -79,7 +79,7 @@ static class Program
         Environment.Exit(statusCode);
     }
 
-    private static void PrintHelp()
+    public static void PrintHelp()
     {
         Console.WriteLine("Usage: program_name [options]\n");
         Console.WriteLine("Options:");
