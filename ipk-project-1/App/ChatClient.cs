@@ -84,12 +84,13 @@ public class ChatClient
     {
         ClientLogger.LogDebug("Disconnecting...");
         await _protocol.Disconnect();
+        await _cancellationTokenSource.CancelAsync();
     }
 
     private async Task ReadInputAsync()
     {
         // Wait until the client is connected to the server
-        await _connectedSignal.WaitAsync();
+        await _connectedSignal.WaitAsync(_cancellationTokenSource.Token);
 
         while (!_cancellationTokenSource.Token.IsCancellationRequested)
         {
