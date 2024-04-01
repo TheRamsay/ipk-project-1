@@ -16,8 +16,4 @@
       <ProjectReference Include="..\App\App.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-      <Compile Remove="ModelsTests\ReplyModelTests.cs" />
-    </ItemGroup>
-
 </Project>
