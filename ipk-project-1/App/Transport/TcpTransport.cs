@@ -84,11 +84,6 @@ public class TcpTransport : ITransport
         await Send($"ERR FROM {data.DisplayName} IS {data.Content}");
     }
 
-    public async Task Reply(ReplyModel data)
-    {
-        var statusStr = data.Status ? "OK" : "NOK";
-        await Send($"REPLY {statusStr} IS {data.Content}");
-    }
 
     public async Task Bye()
     {

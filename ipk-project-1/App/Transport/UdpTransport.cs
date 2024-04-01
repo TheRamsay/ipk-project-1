@@ -22,6 +22,7 @@ public class UdpTransport : ITransport
     private PendingMessage? _pendingMessage;
     private short _messageIdSequence;
     private ProtocolStateBox? _protocolState;
+    private IPAddress _ipAddress;
 
     public event EventHandler<IBaseModel>? OnMessageReceived;
     public event EventHandler? OnConnected;
@@ -86,14 +87,12 @@ public class UdpTransport : ITransport
 
     private async Task Receive()
     {
-        var ipv4 = (await Dns.GetHostAddressesAsync(_options.Host, _cancellationToken)).FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
-        if (ipv4 == null)
-        {
-            throw new ServerUnreachableException("Invalid server address");
-        }
+        var ipv4= await GetIpAddress(_options.Host);
+
+        _ipAddress = ipv4 ?? throw new ServerUnreachableException("Invalid server address");
         
         // UDP client is listening on all ports
-        _client.Client.Bind(new IPEndPoint(ipv4, 0));
+        _client.Client.Bind(new IPEndPoint(_ipAddress, 0));
 
         while (!_cancellationToken.IsCancellationRequested)
         {
@@ -150,11 +149,8 @@ public class UdpTransport : ITransport
     private async Task Send(IBaseUdpModel data)
     {
         var buffer = IBaseUdpModel.Serialize(data);
-
-        var ipv4 = Dns.GetHostAddresses(_options.Host).First(ip => ip.AddressFamily == AddressFamily.InterNetwork);
-        ClientLogger.LogDebug("Sending" + data + "to ip: " + ipv4 + " port: " + _options.Port);
-        var sendTo = new IPEndPoint(ipv4, _options.Port);
-        await _client.SendAsync(buffer, sendTo);
+        var sendTo = new IPEndPoint(_ipAddress, _options.Port);
+        await _client.SendAsync(buffer, sendTo, _cancellationToken);
 
         // If the message is a model with ID, we need to handle proper confirmation from the server
         if (data is IModelWithId modelWithId)
@@ -170,7 +166,7 @@ public class UdpTransport : ITransport
                 // Task is eepy 😴
                 await Task.Delay(_options.Timeout, _cancellationToken);
                 OnTimeoutExpired.Invoke(this, modelWithId);
-            });
+            }, _cancellationToken);
         }
     }
 
@@ -210,6 +206,12 @@ public class UdpTransport : ITransport
             // Big problem ⚠️(server is eepy I guess 😴, we throw an exception to the main thread to handle it)
             _retryExceededSignal.Release();
         }
+    }
+
+    private async Task<IPAddress?> GetIpAddress(string hostname)
+    {
+        return (await Dns.GetHostAddressesAsync(hostname, _cancellationToken))
+            .FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
     }
 
 }
