@@ -13,7 +13,6 @@ public interface ITransport
     public Task Join(JoinModel data);
     public Task Message(MessageModel data);
     public Task Error(ErrorModel data);
-    public Task Reply(ReplyModel data);
     public Task Bye();
     public Task Start(ProtocolStateBox protocolState);
     public void Disconnect();

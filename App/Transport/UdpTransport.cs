@@ -14,23 +14,28 @@ public class UdpTransport : ITransport
     private readonly CancellationToken _cancellationToken;
     private readonly UdpClient _client = new();
     private readonly Options _options;
-    private readonly SemaphoreSlim _timeoutExpiredSignal = new(0, 1);
+    // If we have exceeded the retry count, we need to signal the main thread to throw an exception
+    private readonly SemaphoreSlim _retryExceededSignal = new(0, 1);
+    // We need to keep track of messages that we have already processed, so we don't process them again, only confirm them
     private readonly HashSet<short> _processedMessages = new();
 
     private PendingMessage? _pendingMessage;
     private short _messageIdSequence;
-    private ProtocolStateBox _protocolState;
+    private ProtocolStateBox? _protocolState;
 
     public event EventHandler<IBaseModel>? OnMessageReceived;
     public event EventHandler? OnConnected;
-    private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
     public event EventHandler<IModelWithId> OnTimeoutExpired;
     public event EventHandler? OnMessageDelivered;
+    
+    private event EventHandler<UdpConfirmModel>? OnMessageConfirmed;
 
     public UdpTransport(Options options, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
         _options = options;
+        
+        // Event subscription
         OnMessageConfirmed += OnMessageConfirmedHandler;
         OnTimeoutExpired += OnTimeoutExpiredHandler;
     }
@@ -42,64 +47,31 @@ public class UdpTransport : ITransport
 
     public async Task Auth(AuthModel data)
     {
-        await Send(new UdpAuthModel
-        {
-            Id = _messageIdSequence++,
-            Username = data.Username,
-            DisplayName = data.DisplayName,
-            Secret = data.Secret
-        });
+        await Send(data.ToUdpModel(_messageIdSequence++));
     }
 
     public async Task Join(JoinModel data)
     {
-        await Send(new UdpJoinModel
-        {
-            Id = _messageIdSequence++,
-            DisplayName = data.DisplayName,
-            ChannelId = data.ChannelId
-        });
+        await Send(data.ToUdpModel(_messageIdSequence++));
     }
 
     public async Task Message(MessageModel data)
     {
-        await Send(new UdpMessageModel
-        {
-            Id = _messageIdSequence++,
-            DisplayName = data.DisplayName,
-            Content = data.Content,
-        });
+        await Send(data.ToUdpModel(_messageIdSequence++));
     }
 
     public async Task Error(ErrorModel data)
     {
-        await Send(new UdpErrorModel
-        {
-            Id = _messageIdSequence++,
-            DisplayName = data.DisplayName,
-            Content = data.Content,
-        });
+        await Send(data.ToUdpModel(_messageIdSequence++));
     }
-
-    public async Task Reply(ReplyModel data)
-    {
-        await Send(new UdpReplyModel
-        {
-            Id = _messageIdSequence++,
-            Content = data.Content,
-            Status = data.Status,
-            RefMessageId = 1
-        });
-    }
-
     public async Task Bye()
     {
-        await Send(new UdpByeModel { Id = _messageIdSequence++ });
+        await Send(new ByeModel().ToUdpModel(_messageIdSequence++));
     }
 
-    private async Task MonitorTimeout()
+    private async Task RetryExceededHandler()
     {
-        await _timeoutExpiredSignal.WaitAsync(_cancellationToken);
+        await _retryExceededSignal.WaitAsync(_cancellationToken);
         throw new ServerUnreachableException("Max retries reached, message not delivered");
     }
 
@@ -107,12 +79,14 @@ public class UdpTransport : ITransport
     {
         _protocolState = protocolState;
         OnConnected?.Invoke(this, EventArgs.Empty);
-        await await Task.WhenAny(Receive(), MonitorTimeout());
+        
+        // Wait until receiving loop is finished or retry count is exceeded
+        await await Task.WhenAny(Receive(), RetryExceededHandler());
     }
 
     private async Task Receive()
     {
-        var ipv4 = (await Dns.GetHostAddressesAsync(_options.Host)).FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
+        var ipv4 = (await Dns.GetHostAddressesAsync(_options.Host, _cancellationToken)).FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork);
         if (ipv4 == null)
         {
             throw new ServerUnreachableException("Invalid server address");
@@ -143,12 +117,16 @@ public class UdpTransport : ITransport
                 case UdpConfirmModel confirmModel:
                     OnMessageConfirmed?.Invoke(this, confirmModel);
                     break;
+                // If we have already processed this message, just confirm it and continue
                 case IModelWithId modelWithId when _processedMessages.Contains(modelWithId.Id):
                     await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
                     continue;
+                // If we haven't processed this message yet, confirm it and process it
                 case IModelWithId modelWithId:
                 {
-                    var model = UdpModelMapper(parsedData);
+                    var model = parsedData.ToBaseModel();
+                    
+                    // After authentication, we need to reconnect to a different port, for private communication
                     if (model is ReplyModel && _protocolState.State is ProtocolState.Auth)
                     {
                         _options.Port = (ushort)from.Port;
@@ -173,13 +151,18 @@ public class UdpTransport : ITransport
         var sendTo = new IPEndPoint(ipv4, _options.Port);
         await _client.SendAsync(buffer, sendTo);
 
+        // If the message is a model with ID, we need to handle proper confirmation from the server
         if (data is IModelWithId modelWithId)
         {
             // If it is first time sending this message, create a new pending message
             _pendingMessage ??= new PendingMessage { Model = modelWithId, Retries = 0 };
 
+            // Background task for handling message timeout
+            // Rest of this method is non-blocking, so we can continue with other messages
+            // Confirmation and retry handling is done in the background, by EventHandlers
             Task.Run(async () =>
             {
+                // Task is eepy 😴
                 await Task.Delay(_options.Timeout, _cancellationToken);
                 OnTimeoutExpired.Invoke(this, modelWithId);
             });
@@ -193,10 +176,9 @@ public class UdpTransport : ITransport
 
     private void OnMessageConfirmedHandler(object? sender, UdpConfirmModel data)
     {
+        // If confirmation is for a message we haven't sent, ignore it
         if (_pendingMessage?.Model.Id != data.RefMessageId)
         {
-            // DD rekl ze toto se netestuje
-            // throw new TransportError("Received confirmation for unknown message");
             return;
         }
 
@@ -206,35 +188,23 @@ public class UdpTransport : ITransport
 
     private async void OnTimeoutExpiredHandler(object? sender, IModelWithId data)
     {
-        if (_pendingMessage?.Model.Id == data.Id)
+        if (_pendingMessage?.Model.Id != data.Id)
         {
-            if (_pendingMessage?.Retries < _options.RetryCount)
-            {
-                _pendingMessage.Retries++;
-                ClientLogger.LogDebug("Retransmissioin");
-                await Send((IBaseUdpModel)data);
-            }
-            else
-            {
-                _timeoutExpiredSignal.Release();
-            }
+            return;
+        }
+        
+        // If we haven't exceeded the retry count, retry the message
+        if (_pendingMessage?.Retries < _options.RetryCount)
+        {
+            _pendingMessage.Retries++;
+            ClientLogger.LogDebug("Retransmissioin");
+            await Send((IBaseUdpModel)data);
+        }
+        else
+        {
+            // Big problem ⚠️(server is eepy I guess 😴, we throw an exception to the main thread to handle it)
+            _retryExceededSignal.Release();
         }
     }
 
-    private IBaseModel UdpModelMapper(IBaseUdpModel udpModel)
-    {
-        return udpModel switch
-        {
-            UdpAuthModel data => new AuthModel
-            {
-                DisplayName = data.DisplayName, Secret = data.Secret, Username = data.Username
-            },
-            UdpJoinModel data => new JoinModel { ChannelId = data.ChannelId, DisplayName = data.DisplayName },
-            UdpMessageModel data => new MessageModel { Content = data.Content, DisplayName = data.DisplayName },
-            UdpErrorModel data => new ErrorModel { Content = data.Content, DisplayName = data.DisplayName },
-            UdpReplyModel data => new ReplyModel { Content = data.Content, Status = data.Status },
-            UdpByeModel _ => new ByeModel(),
-            _ => throw new InvalidMessageReceivedException("Unknown UDP message type")
-        };
-    }
 }

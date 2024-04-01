@@ -8,18 +8,22 @@ namespace App;
 public class Ipk24ChatProtocol
 {
     private readonly ITransport _transport;
+    // _messageDeliveredSignal is used for waiting for the message to be delivered (confirmed by the server)
     private readonly SemaphoreSlim _messageDeliveredSignal = new(0, 1);
+    // _messageProcessedSignal is used for waiting for the message to be processed (for example, receiving a reply to the AUTH message)
     private readonly SemaphoreSlim _messageProcessedSignal = new(0, 1);
+    // _endSignal is used for throwing exceptions from EventHandlers
     private readonly SemaphoreSlim _endSignal = new(0, 1);
+    // Used for cancelling the message receive loop
     private readonly CancellationTokenSource _cancellationTokenSource;
+    
     private Exception? _exceptionToThrow;
-
-    private ProtocolStateBox _protocolState;
+    private ProtocolStateBox? _protocolState;
     // TODO: ⚠️
     private const string DisplayName = "Pepa";
 
     public event EventHandler<IBaseModel>? OnMessage;
-    public event EventHandler OnConnected;
+    public event EventHandler? OnConnected;
     
     public Ipk24ChatProtocol(ITransport transport, CancellationTokenSource cancellationTokenSource)
     {
@@ -27,44 +31,61 @@ public class Ipk24ChatProtocol
         _cancellationTokenSource = cancellationTokenSource;
 
         // Event subscription
-        _transport.OnMessageReceived += OnMessageReceived;
-        _transport.OnMessageDelivered += OnMessageDelivered;
-        _transport.OnConnected += (sender, args) => OnConnected?.Invoke(sender, args);
+        _transport.OnMessageReceived += OnMessageReceivedHandler;
+        _transport.OnMessageDelivered += OnMessageDeliveredHandler;
+        _transport.OnConnected += OnConnectedHandler;
     }
 
     public async Task Start()
     {
         _protocolState = new ProtocolStateBox(ProtocolState.Start);
+        
         try
         {
-            await await Task.WhenAny(_transport.Start(_protocolState), CheckErrors());
-        }
-        catch (InvalidMessageReceivedException e) // If server sends a malformed message, send ERR, BYE and disconnect
+            // Start the receive loop
+            // This will end if any of the following happens:
+            // - Server sends a malformed message
+            // - Server sends a BYE message
+            // - Server closes the connection
+            // - Server sends an error message
+            // - Server sends a message that is not expected in the current state
+            // The ProtocolEnHandler function is used for throwing exceptions from EventHandlers
+            // This is necessary because the exceptions thrown in EventHandlers are not caught by the try-catch block
+            await await Task.WhenAny(_transport.Start(_protocolState), ProtocolEndHandler());
+        } 
+        // If server sends a malformed message, send ERR, BYE and disconnect
+        catch (InvalidMessageReceivedException e)
         {
-            await WaitForDelivered(_transport.Error(new ErrorModel { Content = e.Message, DisplayName = DisplayName }));
+            var errorModel = new ErrorModel
+            {
+                Content = e.Message, DisplayName = DisplayName
+            };
+            
+            await SendInternal(_transport.Error(errorModel));
+            // Exception is rethrown for proper ending of the protocol in the ChatClient
             throw;
         }
     }
 
     private async Task Auth(AuthModel data)
     {
-        await WaitForDeliveredAndProcessed(_transport.Auth(data));
+        await SendInternal(_transport.Auth(data), true);
     }
 
     private async Task Join(JoinModel data)
     {
-        await WaitForDeliveredAndProcessed(_transport.Join(data));
+        await SendInternal(_transport.Join(data), true);
     }
 
     private async Task Message(MessageModel data)
     {
-        await WaitForDelivered(_transport.Message(data));
+        await SendInternal(_transport.Message(data));
     }
 
     public async Task Disconnect()
     {
-        // Send bye, wait for delivered and disconnect
-        await WaitForDelivered(_transport.Bye());
+        await SendInternal(_transport.Bye());
+        // This will cancel the message receive loop
         await _cancellationTokenSource.CancelAsync();
         _transport.Disconnect();
     }
@@ -81,8 +102,43 @@ public class Ipk24ChatProtocol
         await Task.WhenAll(tasks);
     }
 
+    private async Task ProtocolEndHandler()
+    {
+        ClientLogger.LogDebug("Waiting for end signal");
+        await _endSignal.WaitAsync();
+        ClientLogger.LogDebug("Received end signal");
+        
+        if (_exceptionToThrow is not null)
+        {
+            throw _exceptionToThrow;
+        }
+    }
+
+    private async Task SendInternal(Task task, bool waitForProcessed = false)
+    {
+        // If message needs to be processed, wait for the message to be delivered and processed
+        // This is for example needed when sending an AUTH message, because we need to know if the server accepted it
+        if (waitForProcessed)
+        {
+            await WaitForDeliveredAndProcessed(task);
+        }
+        // If the message does not need to be processed, wait only for the message to be delivered
+        // In case of TCP, this will go through immediately, because the message is sent immediately
+        // And the underlying transport layer will handle it for us
+        // But in case of UDP, we need to wait for the message to be delivered (this is verified by receiving the CONFIRM message)
+        else
+        {
+            await WaitForDelivered(task);
+        }
+    }
+    
     public async Task Send(IBaseModel model)
     {
+        if (_protocolState is null)
+        {
+            throw new InternalException("Protocol not started");
+        }
+        
         switch (_protocolState.State, model)
         {
             case (ProtocolState.Start, AuthModel data):
@@ -107,20 +163,14 @@ public class Ipk24ChatProtocol
         }
     }
 
-    private async Task CheckErrors()
-    {
-        ClientLogger.LogDebug("Waiting for end signal");
-        await _endSignal.WaitAsync();
-        ClientLogger.LogDebug("Received end signal");
-        
-        if (_exceptionToThrow is not null)
-        {
-            throw _exceptionToThrow;
-        }
-    }
     
-    private async Task Receive(IBaseModel model)
+    private void Receive(IBaseModel model)
     {
+        if (_protocolState is null)
+        {
+            throw new InternalException("Protocol not started");
+        }
+        
         switch (_protocolState.State, model)
         {
             case (ProtocolState.Auth, ReplyModel { Status: true } data):
@@ -142,6 +192,7 @@ public class Ipk24ChatProtocol
                 break;
             case (ProtocolState.Open, ReplyModel data):
                 // We are currently not waiting for any reply, so we can ignore it
+                // Unexpected reply's are valid but ignored
                 if (_messageProcessedSignal.CurrentCount != 0)
                 {
                     break;
@@ -164,13 +215,46 @@ public class Ipk24ChatProtocol
         }
     }
 
-    private void OnMessageDelivered(object? sender, EventArgs args)
+    #region Event handlers
+
+    private void OnMessageDeliveredHandler(object? sender, EventArgs args)
     {
-        _messageDeliveredSignal.Release();
+        try
+        {
+            _messageDeliveredSignal.Release();
+        }
+        catch (Exception e)
+        {
+           _exceptionToThrow = e;
+           _endSignal.Release();
+        }
     }
 
-    private async void OnMessageReceived(object? sender, IBaseModel model)
+    private void OnMessageReceivedHandler(object? sender, IBaseModel model)
     {
-        await Receive(model);
+        try
+        {
+            Receive(model);
+        }
+        catch (Exception e)
+        {
+           _exceptionToThrow = e;
+           _endSignal.Release();
+        }
     }
+    
+    private void OnConnectedHandler(object? sender, EventArgs args)
+    {
+        try
+        {
+            OnConnected?.Invoke(sender, args);
+        }
+        catch (Exception e)
+        {
+            _exceptionToThrow = e;
+            _endSignal.Release();
+        }
+    }
+
+    #endregion
 }

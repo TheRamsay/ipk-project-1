@@ -25,8 +25,8 @@ public class ChatClient
         _protocol = protocol;
         _standardInputReader = standardInputReader;
         
-        _protocol.OnMessage += OnMessageReceived;
-        _protocol.OnConnected += OnConnected;
+        _protocol.OnMessage += OnMessageReceivedHandler;
+        _protocol.OnConnected += OnConnectedHandler;
     }
 
     public async Task Start()
@@ -90,7 +90,6 @@ public class ChatClient
             // Eof reached
             if (line is null)
             {
-                // await Stop();
                 ClientLogger.LogDebug("EOF reached");
                 return;
             }
@@ -99,6 +98,7 @@ public class ChatClient
             if (line.Length == 0)
             {
                 ClientLogger.LogInternalError("Messages can't be empty.");
+                continue;
             }
 
             try
@@ -106,11 +106,13 @@ public class ChatClient
                 var command = UserCommandModel.ParseCommand(line);
                 await ProcessCommand(command);
             }
-            catch (InvalidInputException e) // User action is invalid, we don't want to crash the client, just log the error
+            // User action is invalid, we don't want to crash the client, just log the error
+            catch (InvalidInputException e)
             {
                 ClientLogger.LogInternalError($"{e.Message}");
             }
-            catch (ValidationException e) // User input is invalid, we don't want to crash the client, just log the error
+            // User input is invalid, we don't want to crash the client, just log the error
+            catch (ValidationException e)
             {
                 ClientLogger.LogInternalError($"Invalid format, try /help to see the correct format (Reason: {e.Message})");
             }
@@ -151,24 +153,20 @@ public class ChatClient
         }
     }
 
-    private void OnMessageReceived(object? sender, IBaseModel model)
+    private void OnMessageReceivedHandler(object? sender, IBaseModel model)
     {
-        // throw new Exception("ZMRD MFEKFWEE");
-        if (model is MessageModel message)
+        switch (model)
         {
-            ClientLogger.LogMessage(message);
-        }
-        else if (model is ReplyModel reply)
-        {
-            ClientLogger.LogReploy(reply);
-        }
-        else if (model is ErrorModel error)
-        {
-            ClientLogger.LogError(error);
+            case MessageModel message:
+                ClientLogger.LogMessage(message);
+                break;
+            case ReplyModel reply:
+                ClientLogger.LogReploy(reply);
+                break;
         }
     }
 
-    private void OnConnected(object? sender, EventArgs args)
+    private void OnConnectedHandler(object? sender, EventArgs args)
     {
         _connectedSignal.Release();
     }

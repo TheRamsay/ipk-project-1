@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Text;
 using App.Enums;
+using App.Exceptions;
 
 namespace App.Models.udp;
 

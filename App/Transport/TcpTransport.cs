@@ -33,9 +33,6 @@ public class TcpTransport : ITransport
         OnConnected?.Invoke(this, EventArgs.Empty);
         ClientLogger.LogDebug("Connected to server");
 
-        // TODO: uh oh 20_000
-        // _stream.ReadTimeout = 20000;
-
         while (true)
         {
             var receivedData = await ReadUntilCrlf();
@@ -44,6 +41,7 @@ public class TcpTransport : ITransport
             if (receivedData is null)
             {
                 ClientLogger.LogDebug("Server has closed the connection");
+                // TODO:
                 throw new ServerUnreachableException("Server has closed the connection");
             }
 
@@ -104,34 +102,38 @@ public class TcpTransport : ITransport
         var bytes = Encoding.UTF8.GetBytes(message);
         if (_stream != null)
         {
-            await _stream.WriteAsync(bytes);
+            await _stream.WriteAsync(bytes, _cancellationToken);
             OnMessageDelivered?.Invoke(this, EventArgs.Empty);
         }
     }
 
     private IBaseModel ParseMessage(string message)
     {
-
         var parts = message.Split(" ");
+        // RFC-5234: ABNF literals are case-insensitive, so we can just uppercase everything
         var partsUpper = message.ToUpper().Split(" ");
-        
-        
-       switch (partsUpper)
+
+        return partsUpper switch
         {
-            case ["JOIN", _, "AS", _]:
-                return new JoinModel { ChannelId = parts[1], DisplayName = parts[3]};
-            case ["AUTH", _, "AS", _, "USING", _]:
-                return new AuthModel { Username = parts[1], Secret = parts[3], DisplayName = parts[5] };
-            case ["MSG", "FROM", _, "IS", ..]:
-                return new MessageModel { DisplayName = parts[2], Content = string.Join(" ", parts.Skip(4)) };
-            case ["ERR", "FROM", _, "IS", ..]:
-                return new ErrorModel { DisplayName = parts[2], Content = string.Join(" ", parts.Skip(4)) };
-            case ["REPLY", _, "IS", ..]:
-                return new ReplyModel { Status = parts[1] == "OK", Content = string.Join(" ", parts.Skip(3)) };
-            case ["BYE"]:
-                return new ByeModel();
-            default:
-                throw new InvalidMessageReceivedException($"Unknown message type: {message}");
+            ["JOIN", _, "AS", _] => new JoinModel { ChannelId = parts[1], DisplayName = parts[3] },
+            ["AUTH", _, "AS", _, "USING", _] => new AuthModel
+            {
+                Username = parts[1], Secret = parts[3], DisplayName = parts[5]
+            },
+            ["MSG", "FROM", _, "IS", ..] => new MessageModel
+            {
+                DisplayName = parts[2], Content = string.Join(" ", parts.Skip(4))
+            },
+            ["ERR", "FROM", _, "IS", ..] => new ErrorModel
+            {
+                DisplayName = parts[2], Content = string.Join(" ", parts.Skip(4))
+            },
+            ["REPLY", _, "IS", ..] => new ReplyModel
+            {
+                Status = parts[1] == "OK", Content = string.Join(" ", parts.Skip(3))
+            },
+            ["BYE"] => new ByeModel(),
+            _ => throw new InvalidMessageReceivedException($"Unknown message type: {message}")
         };
     }
 
@@ -139,7 +141,6 @@ public class TcpTransport : ITransport
     {
         if (_stream is null)
         {
-            ClientLogger.LogDebug("AAAAAA");
             return null;
         }
 
@@ -147,7 +148,8 @@ public class TcpTransport : ITransport
         var prevChar = -1;
         var sb = new StringBuilder();
 
-        while (await _stream.ReadAsync(buffer.AsMemory(0, 1)) != 0)
+        // Read byte by byte until we find \r\n
+        while (await _stream.ReadAsync(buffer.AsMemory(0, 1), _cancellationToken) != 0)
         {
             var currChar = (int)buffer[0];
             if (prevChar == '\r' && currChar == '\n')
@@ -157,7 +159,8 @@ public class TcpTransport : ITransport
             sb.Append((char)currChar);
             prevChar = currChar;
         }
-
+        
+        // If we reach the end of the stream and no valid message was found, return null
         return null;
     }
 }
