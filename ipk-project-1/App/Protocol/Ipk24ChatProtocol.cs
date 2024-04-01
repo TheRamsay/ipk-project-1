@@ -97,20 +97,20 @@ public class Ipk24ChatProtocol: IProtocol
 
     private async Task WaitForDelivered(Task task)
     {
-        var tasks = new[] { _messageDeliveredSignal.WaitAsync(), task };
+        var tasks = new[] { _messageDeliveredSignal.WaitAsync(_cancellationTokenSource.Token), task };
         await Task.WhenAll(tasks);
     }
 
     private async Task WaitForDeliveredAndProcessed(Task task)
     {
-        var tasks = new[] { _messageDeliveredSignal.WaitAsync(), _messageProcessedSignal.WaitAsync(), task };
+        var tasks = new[] { _messageDeliveredSignal.WaitAsync(_cancellationTokenSource.Token), _messageProcessedSignal.WaitAsync(_cancellationTokenSource.Token), task };
         await Task.WhenAll(tasks);
     }
 
     private async Task ProtocolEndHandler()
     {
-        ClientLogger.LogDebug("Waiting for end signal");
-        await _endSignal.WaitAsync();
+        ClientLogger.LogDebug("Waiti_canceng for end signal");
+        await _endSignal.WaitAsync(_cancellationTokenSource.Token);
         ClientLogger.LogDebug("Received end signal");
 
         if (_exceptionToThrow is not null)
