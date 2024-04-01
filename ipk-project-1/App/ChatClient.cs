@@ -135,6 +135,7 @@ public class ChatClient
             case UserCommand.Auth:
                 model = AuthModel.Parse(command.Content);
                 _displayName = ((AuthModel)model).DisplayName;
+                _protocol.Rename(_displayName);
                 await _protocol.Send(model);
                 break;
             case UserCommand.Join:
@@ -151,6 +152,7 @@ public class ChatClient
                 model = RenameModel.Parse(command.Content);
                 ClientLogger.LogDebug($"Renamed to {((RenameModel)model).DisplayName}");
                 _displayName = ((RenameModel)model).DisplayName;
+                _protocol.Rename(_displayName);
                 ClientLogger.LogDebug($"New name is {_displayName}");
                 break;
             case UserCommand.Help:

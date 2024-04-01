@@ -9,5 +9,6 @@ public interface IProtocol
     
     Task Start();
     Task Disconnect();
+    void Rename(string displayName);
     Task Send(IBaseModel model);
 }

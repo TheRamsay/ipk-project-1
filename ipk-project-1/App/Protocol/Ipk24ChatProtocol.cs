@@ -19,7 +19,7 @@ public class Ipk24ChatProtocol: IProtocol
 
     private Exception? _exceptionToThrow;
     private ProtocolStateBox? _protocolState;
-    private const string DisplayName = "Pepa";
+    private string _displayName = string.Empty;
 
     public event EventHandler<IBaseModel>? OnMessage;
     public event EventHandler? OnConnected;
@@ -58,13 +58,18 @@ public class Ipk24ChatProtocol: IProtocol
             var errorModel = new ErrorModel
             {
                 Content = e.Message,
-                DisplayName = DisplayName
+                DisplayName = _displayName
             };
 
             await SendInternal(_transport.Error(errorModel));
             // Exception is rethrown for proper ending of the protocol in the ChatClient
             throw;
         }
+    }
+    
+    public void Rename(string displayName)
+    {
+        _displayName = displayName;
     }
 
     private async Task Auth(AuthModel data)
