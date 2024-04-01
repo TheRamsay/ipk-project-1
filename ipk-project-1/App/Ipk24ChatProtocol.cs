@@ -19,7 +19,6 @@ public class Ipk24ChatProtocol: IProtocol
 
     private Exception? _exceptionToThrow;
     private ProtocolStateBox? _protocolState;
-    // TODO: ⚠️
     private const string DisplayName = "Pepa";
 
     public event EventHandler<IBaseModel>? OnMessage;
