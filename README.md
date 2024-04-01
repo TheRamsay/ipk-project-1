@@ -2,12 +2,12 @@
 Autor: Dominik Huml <xhumld00@vutbr.cz>
 
 ## Teorie
-Aplikace je klientem pro IPK24-CHAT server. Protokol má dvě varianty, první jako transportní protokol používá TCP<sup>1</sub> a druhá varianta používá UDP<sup>2</sup>.
-Pro navázání spojení je využit síťový socket.
+Aplikace je klientem pro IPK24-CHAT server. Protokol má dvě varianty, první jako transportní protokol používá TCP<sup>[1]</sup> a druhá varianta používá UDP<sup>[2]</sup>
+Pro navázání spojení je využit síťový socket<sup>[3]</sup>.
 
 ### Socket
 Je to koncový bod který slouží pro posílání a příjímání dat v síti. V kontextu této aplikace bude myšlen síťový socket který se používa pro komuninaci
-v TCP/IP sadě. Ten je idetiifikován číslem portu a IP adresou.
+v TCP/IP sadě<sup>[4]</sup>. Ten je idetifikován číslem portu a IP adresou.
 
 ### TCP
 TCP je protokol transportní vrstvy. Protkol je spojově orientovaný a zajišťuje spolehlivý přenos dat. Stará se tedy o věci jako duplikace paketů, ztráta paketů, pořadí paketů atd.
@@ -22,7 +22,7 @@ Aplikace si tedy sama zajišťuje doručení zprávy, takže i použití UDP mů
 
 ## Implementace
 Aplikace je napsána v jazyce C#. Zvolil jsem event-driven model, kde primárně využívám události na změnu stavu aplikace.
-Dále využívám `Task` pro asynchronní zpracování vstupu a výstupu. Je to C# abstrakce nad vlákny, která je mnohem jednodušší na použití.
+Dále využívám `Task`<sup>[5]</sup> pro asynchronní zpracování vstupu a výstupu. Je to C# abstrakce nad vlákny, která je mnohem jednodušší na použití.
 Je také efektivnější, protože nevytváří nové vlákno pro každý požadavek, ale využívá thread pool.
 
 Aplikaci jsem rozdělil do více tříd, které se starají o různé části aplikace. Díky tomu je možné využít principu kompozice a injekce závislostí.
@@ -31,7 +31,8 @@ Hlavní části jsou `ChatClient`, `IProtocol`a `ITransport`. Pro přenos dat js
 ![Flow diagram](/ipk-project-1/App/Resources/flow.png "Flow")
 
 ### Datové modely
-Pro obecnou komunikaci je vyvořené rozhraní `IBaseModel`, které si pak implementují třídy dle typu zprávy (`AuthModel` pro AUTH zprávu). Tyto zprávy se pak předávají ve všech obecných rozhraních. Protokol UDP pak potřebuje nějaké data navíc (MessageID apod.), kvůli tomu vznikly modely pro UDP. Ty jsou sjednoceny přes rozhraní `IBaseUdpModel`. Tohle rozhraní dále implementuje funkce na binární serializaci a deserializaci, které pomocí reflexe zvládnou zpracovat libovolnou UDP třídu. Validace modelů probíhá přes annotační atributy.
+Pro obecnou komunikaci je vyvořené rozhraní `IBaseModel`, které si pak implementují třídy dle typu zprávy (např. `AuthModel` pro AUTH zprávu). Tyto zprávy se pak předávají ve všech obecných rozhraních. Protokol UDP pak potřebuje nějaké data navíc (MessageID apod.), kvůli tomu vznikly modely pro UDP. Ty jsou sjednoceny přes rozhraní `IBaseUdpModel`. Tohle rozhraní dále implementuje funkce na binární serializaci a deserializaci, které pomocí reflexe zvládnou zpracovat libovolnou UDP třídu. Validace modelů probíhá přes annotační atributy.
+
 ```csharp
     [RegularExpression("[!-~]{1,20}", ErrorMessage = "DisplayName has to have printable characters with length from 1 to 128 characters")]
     public required string DisplayName { get; set; }
@@ -39,6 +40,7 @@ Pro obecnou komunikaci je vyvořené rozhraní `IBaseModel`, které si pak imple
 
 ### ITransport
 Rozhraní které se stará o přenos dat. Implementace tohoto rozhraní je pak závislá na použitém transportním protokolu. 
+
 ```csharp
 public interface ITransport
 {
@@ -57,11 +59,12 @@ public interface ITransport
 ```
 Metoda `Start` je zde jako entrypoint pro začátek komunikace. V této metodě se naváže spojení a začne se poslouchat na nové zprávy.
 Ty jsou poté zpracovány a předány dál pomocí eventů. `OnMessageReceived` zašle zprávu na zpracování a `OnMessageDelivered` oznamuje, že zpráva byla úspěšně doručena. V případě TCP je tento event vyvolán okamžitě,
-ale UDP ho vyvolá až po úspěšném doručení zprávy které se dějě ve třídě `UdpTransport`.
+ale UDP ho vyvolá až po úspěšném doručení zprávy, které se děje ve třídě `UdpTransport`.
 
 ### IProtocol
 Rozhraní které se stará o zpracování vstupních a výstupních dat. Na základě toho pak přepína interní stav aplikace. 
-Tyto tranzice se snaží kopírovat konečný stavový automat ze zadání, ale jsou trochu modifikoány pro event-driven model.
+Tyto tranzice se snaží kopírovat konečný stavový automat ze zadání, ale jsou trochu modifikovány pro event-driven model.
+
 ```csharp
 public interface IProtocol
 {
@@ -78,6 +81,7 @@ Jako entrypoint je zde zase metoda `Start`, která poté spustí komunikaci pře
 
 ### ChatClient
 Tato třída je už pak samotná chatovací aplikace, která řídí běh programu. 
+
 ```csharp
 public class ChatClient
 {
@@ -95,7 +99,8 @@ public class ChatClient
 }
 ```
 Injektuje se zde rozhraní `IStandardInputReader`, které se pak stará o čtení vstupu ze standardního vstupu. Je to uděláno tímto způsobem pro snadnější testovatelnost. 
-Klient pak take dostane specifikovaný protokol, a spustí běh aplikace.
+Klient pak také dostane specifikovaný protokol, a spustí běh aplikace.
+
 ```csharp
     try
     {
@@ -107,7 +112,7 @@ s tím že přijímání zpráv od serveru je voláno asynchronně, a díky tomu
 spustí exekuce zbytku programu, a ten se postará o ukončení všech tasků které běží na pozadí, pomocí tzv. CancellationTokenu, a vypíše výsledek uživatelu a řádně ukončí aplikaci.
 
 ## Testování
-Vyzkoušel jsem si tři přístupy testování. Všechno testování bylo doprovázeno také programem Wireshark. 
+Vyzkoušel jsem si tři přístupy testování. Všechno testování bylo doprovázeno také programem Wireshark<sup>[6]</sup>. 
 
 ![Env specs](/ipk-project-1/App/Resources/specs.png "Specifications")
 *Výpis z testovacího prostředí*
@@ -116,7 +121,7 @@ Vyzkoušel jsem si tři přístupy testování. Všechno testování bylo doprov
 *Wireshark logy z testu zmíněném v sekci o [E2E testech](#e2e-testování)*
 
 ### Ruční testování
-První pokusy o testování byly přes utilitu `netcat`. Použil jsem ji pouze na TCP variantu, jelikož posílat ručně binární zprávy bylo značně komplikované.
+První pokusy o testování byly přes utilitu `netcat`<sup>[7]</sup>. Použil jsem ji pouze na TCP variantu, jelikož posílat ručně binární zprávy bylo značně komplikované.
 Tohle testování jsem používal jen na začátku vývoje, poté jsem přešel k více sofistikovaným metodám
 
 Zde je příklad testování základní autentikace. Vstupem je příkaz `/auth`, očekávaný výstup je oznámení o úspešné autentikaci.
@@ -133,7 +138,7 @@ Na obrázku je testování plnohodnté komunikace. Na vstupu jsou všechny pří
 ![Python server](/ipk-project-1/App/Resources/python-test.png "Python server")
 
 ### Unit testy
-Validace modelů a příkazů byla otestována přes C# unit testy, pomocí framework xUnit.
+Validace modelů a příkazů byla otestována přes C# unit testy, pomocí frameworku `xUnit`<sup>[8]</sup>.
 
 Test na edge case kdy by se uživatel snažil přihlásit se jménem které obsahuje diakritiku, což není povoleno. Očekávaným výstupem testu je vyhození chyby `ValidationException`. Podobné testy jsou vytvořené pro všechny model. Jsou sice základní a repetetivní, ale aspoň potom máme jistotu že v celé aplikaci se pracuje vždy s validními daty.
 ```csharp
@@ -153,8 +158,8 @@ Test na edge case kdy by se uživatel snažil přihlásit se jménem které obsa
         Assert.Throws<ValidationException>(() => ModelValidator.Validate(model));
     } 
 ```
- Dále jsem se také pokusil udělat testy už větších částí projektu,
-např. testy pro IProtocol rozhraní. Na ty jsem ještě využil knihovnu `NSubstitute`, kterou jsem použil na mockování síťových věcí.
+Dále jsem se také pokusil udělat testy už větších částí projektu,
+např. testy pro IProtocol rozhraní. Na ty jsem ještě využil knihovnu `NSubstitute`<sup>[9]</sup>, kterou jsem použil na mockování síťových věcí.
 
 Tento test testuje zda funguje správně zadání příkazu pro autentikaci. Očekávaným výstupem je, že pres rozhraní protokol budou zaslána správně zparsovaná zpráva s autentikačním modelem. Závislosti klienta jsou mocnuté již zmíněnou knihovnou, aby testy byly izolované, a nezávisely např. na spojení se serverem. K tomu slouží E2E testy.
 ```csharp
@@ -193,3 +198,25 @@ Tento test testuje zda funguje správně zadání příkazu pro autentikaci. Oč
 Unit testy byly spoušteny v prostředí Rider
 
 ![Test output](/ipk-project-1/App/Resources/output.png "Test output")
+
+## Bibliografie
+
+1. Request for Comments, RFC793, Postel J. [RFC 793 - TCP](https://www.ietf.org/rfc/rfc0793.txt)
+2. Request for Comments, RFC768, Postel J. [RFC 768 - UDP](https://www.ietf.org/rfc/rfc768.txt)
+3. IBM documentation, Socket Addresses in TCP/IP [Sockets](https://www.ibm.com/docs/en/aix/7.1?topic=addresses-socket-in-tcpip)
+4. Request for Comments, RFC1180, Comer, D. E. [RFCC 1180 - TCP/IP](https://datatracker.ietf.org/doc/html/rfc1180)
+5. Microsoft Learn, Task Class (System.Threading.Tasks) [Task Class](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task?view=net-8.0)
+6. Wireshark [Wireshark](https://www.wireshark.org/)
+7. Netcat [Netcat](https://www.commandlinux.com/man-page/man1/nc.1.html)
+8. Xunit [Xunit](https://xunit.net/)
+9. NSubstitute [NSubstitute](khttps://nsubstitute.github.io/)
+
+[1]: https://www.ietf.org/rfc/rfc0793.txt
+[2]: https://www.ietf.org/rfc/rfc768.txt
+[3]: https://www.ibm.com/docs/en/aix/7.1?topic=addresses-socket-in-tcpip
+[4]: https://datatracker.ietf.org/doc/html/rfc1180 
+[5]: https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task?view=net-8.0
+[6]: https://www.wireshark.org/
+[7]: https://www.commandlinux.com/man-page/man1/nc.1.html
+[8]: https://xunit.net/
+[9]: https://nsubstitute.github.io/
