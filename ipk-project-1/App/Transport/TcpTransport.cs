@@ -31,7 +31,6 @@ public class TcpTransport : ITransport
         await _client.ConnectAsync(_options.Host, _options.Port, _cancellationToken);
         _stream = _client.GetStream();
         OnConnected?.Invoke(this, EventArgs.Empty);
-        ClientLogger.LogDebug("Connected to server");
 
         while (true)
         {
@@ -40,7 +39,6 @@ public class TcpTransport : ITransport
             // This means the server has closed the connection
             if (receivedData is null)
             {
-                ClientLogger.LogDebug("Server has closed the connection");
                 throw new ServerUnreachableException("Server has closed the connection");
             }
 

@@ -82,7 +82,6 @@ public class ChatClient
 
     public async Task Stop()
     {
-        ClientLogger.LogDebug("Disconnecting...");
         await _protocol.Disconnect();
         await _cancellationTokenSource.CancelAsync();
     }
@@ -99,7 +98,6 @@ public class ChatClient
             // Eof reached
             if (line is null)
             {
-                ClientLogger.LogDebug("EOF reached");
                 return;
             }
 
@@ -151,10 +149,8 @@ public class ChatClient
                 break;
             case UserCommand.Rename:
                 model = RenameModel.Parse(command.Content);
-                ClientLogger.LogDebug($"Renamed to {((RenameModel)model).DisplayName}");
                 _displayName = ((RenameModel)model).DisplayName;
                 _protocol.Rename(_displayName);
-                ClientLogger.LogDebug($"New name is {_displayName}");
                 break;
             case UserCommand.Help:
                 Program.PrintHelp();

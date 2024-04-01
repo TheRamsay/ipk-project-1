@@ -109,9 +109,7 @@ public class Ipk24ChatProtocol : IProtocol
 
     private async Task ProtocolEndHandler()
     {
-        ClientLogger.LogDebug("Waiti_canceng for end signal");
         await _endSignal.WaitAsync(_cancellationTokenSource.Token);
-        ClientLogger.LogDebug("Received end signal");
 
         if (_exceptionToThrow is not null)
         {

@@ -92,11 +92,11 @@ public class UdpTransport : ITransport
         _ipAddress = ipv4 ?? throw new ServerUnreachableException("Invalid server address");
 
         // UDP client is listening on all ports
-        _client.Client.Bind(new IPEndPoint(_ipAddress, 0));
+        // _client.Client.Bind(new IPEndPoint(_ipAddress, 0));
+        _client.Client.Bind(new IPEndPoint(IPAddress.Any, 0));
 
         while (!_cancellationToken.IsCancellationRequested)
         {
-            ClientLogger.LogDebug("Waiting for message...");
             var response = await _client.ReceiveAsync(_cancellationToken);
             var from = response.RemoteEndPoint;
             var dataBuffer = response.Buffer;
@@ -117,7 +117,6 @@ public class UdpTransport : ITransport
                 throw new InvalidMessageReceivedException($"Unable to validate received message: {e.Message}");
             }
 
-            ClientLogger.LogDebug("Received message:" + parsedData);
 
             switch (parsedData)
             {
@@ -134,7 +133,6 @@ public class UdpTransport : ITransport
                         if (model is ReplyModel && _protocolState.State is ProtocolState.Auth)
                         {
                             _options.Port = (ushort)from.Port;
-                            ClientLogger.LogDebug($"Reconnecting to different port for authenticated communication (PORT: ${from.Port})");
                         }
 
                         await Send(new UdpConfirmModel { RefMessageId = modelWithId.Id });
@@ -198,7 +196,6 @@ public class UdpTransport : ITransport
         if (_pendingMessage?.Retries < _options.RetryCount)
         {
             _pendingMessage.Retries++;
-            ClientLogger.LogDebug("Retransmissioin");
             await Send((IBaseUdpModel)data);
         }
         else
