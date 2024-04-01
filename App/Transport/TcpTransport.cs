@@ -99,7 +99,7 @@ public class TcpTransport : ITransport
     private async Task Send(string message)
     {
         message = $"{message}\r\n";
-        var bytes = Encoding.UTF8.GetBytes(message);
+        var bytes = Encoding.ASCII.GetBytes(message);
         if (_stream != null)
         {
             await _stream.WriteAsync(bytes, _cancellationToken);

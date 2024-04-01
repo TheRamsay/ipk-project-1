@@ -21,34 +21,7 @@ static class Program
             .WithParsed(o => RunClient(o).Wait());
     }
 
-    static async Task<string?> ReadUntilCrlf(Stream _stream)
-    {
-        if (_stream is null)
-        {
-            ClientLogger.LogDebug("AAAAAA");
-            return null;
-        }
-
-        var buffer = new byte[1];
-        var prevChar = -1;
-        var sb = new StringBuilder();
-
-        while (await _stream.ReadAsync(buffer.AsMemory(0, 1)) != 0)
-        {
-            var currChar = (int)buffer[0];
-            if (prevChar == '\r' && currChar == '\n')
-            {
-                return sb.ToString().TrimEnd('\r', '\n');
-            }
-            sb.Append((char)currChar);
-            prevChar = currChar;
-        }
-
-        return null;
-    }
-
-
-    public static async Task RunClient(Options opt)
+    public static async Task<int> RunClient(Options opt)
     {
         var source = new CancellationTokenSource();
 
@@ -76,6 +49,6 @@ static class Program
             }
         };
 
-        await client.Start();
+        return await client.Start();
     }
 }
