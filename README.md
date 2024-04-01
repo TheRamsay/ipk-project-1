@@ -1,7 +1,6 @@
 ﻿# Projekt 1: Klient pro IPK24-CHAT server 
 Autor: Dominik Huml <xhumld00@vutbr.cz>
 
-
 ## Teorie
 Aplikace je klientem pro IPK24-CHAT server. Protokol má dvě varianty, první jako transportní protokol používá TCP<sup>1</sub> a druhá varianta používá UDP<sup>2</sup>.
 Pro navázání spojení je využit síťový socket.
@@ -13,7 +12,7 @@ v TCP/IP sadě. Ten je idetiifikován číslem portu a IP adresou.
 ### TCP
 TCP je protokol transportní vrstvy. Protkol je spojově orientovaný a zajišťuje spolehlivý přenos dat. Stará se tedy o věci jako duplikace paketů, ztráta paketů, pořadí paketů atd.
 Aby tohle všechno mohl zajišťovat, tak musí být navázáno spojení mezi klientem a serverem. Toto spojení je navázáno pomocí tzv. three-way handshake. Protokol nepřenáší "zprávy" ale proud bytů.
-Kvůli tomu je potřeba si zvolit nějaký delimitér, který bude určovat kde končí jedna zpráva a kde začíná další. V tomto případě je to "\r\n".
+Kvůli tomu je potřeba si zvolit nějaký delimitér, který bude určovat kde končí jedna zpráva a kde začíná další. V tomto případě je to `\r\n`.
 Obecně je TCP pomalejší než UDP, ale je spolehlivější, což je v případě chatu důležité.
 
 ### UDP
@@ -29,7 +28,9 @@ Je také efektivnější, protože nevytváří nové vlákno pro každý požad
 Aplikaci jsem rozdělil do více tříd, které se starají o různé části aplikace. Díky tomu je možné využít principu kompozice a injekce závislostí.
 Hlavní části jsou `ChatClient`, `IProtocol`a `ITransport`. Pro přenos dat jsou pak specifikovány modely, které pak mohou být dále specializovány pro protokol.
 
-## Datové modely
+![Flow diagram](/ipk-project-1/App/Resources/flow.png "Flow")
+
+### Datové modely
 Pro obecnou komunikaci je vyvořené rozhraní `IBaseModel`, které si pak implementují třídy dle typu zprávy (`AuthModel` pro AUTH zprávu). Tyto zprávy se pak předávají ve všech obecných rozhraních. Protokol UDP pak potřebuje nějaké data navíc (MessageID apod.), kvůli tomu vznikly modely pro UDP. Ty jsou sjednoceny přes rozhraní `IBaseUdpModel`. Tohle rozhraní dále implementuje funkce na binární serializaci a deserializaci, které pomocí reflexe zvládnou zpracovat libovolnou UDP třídu. Validace modelů probíhá přes annotační atributy.
 ```csharp
     [RegularExpression("[!-~]{1,20}", ErrorMessage = "DisplayName has to have printable characters with length from 1 to 128 characters")]
@@ -106,22 +107,35 @@ s tím že přijímání zpráv od serveru je voláno asynchronně, a díky tomu
 spustí exekuce zbytku programu, a ten se postará o ukončení všech tasků které běží na pozadí, pomocí tzv. CancellationTokenu, a vypíše výsledek uživatelu a řádně ukončí aplikaci.
 
 ## Testování
-Vyzkoušel jsem si tři přístupy testování. Všechno testování bylo doprovázeno také programem Wireshark.
-![Wireshark debug](/ipk-project-1/App/resources/wireshark.png "Wireshark")
+Vyzkoušel jsem si tři přístupy testování. Všechno testování bylo doprovázeno také programem Wireshark. 
+
+![Env specs](/ipk-project-1/App/Resources/specs.png "Specifications")
+*Výpis z testovacího prostředí*
+
+![Wireshark debug](/ipk-project-1/App/Resources/wireshark.png "Wireshark")
+*Wireshark logy z testu zmíněném v sekci o [E2E testech](#e2e-testování)*
 
 ### Ruční testování
-První pokusy o testování byly přes utilitu `natcat`. Použil jsem ji pouze na TCP variantu, jelikož posílat ručně binární zprávy bylo značně komplikované.
+První pokusy o testování byly přes utilitu `netcat`. Použil jsem ji pouze na TCP variantu, jelikož posílat ručně binární zprávy bylo značně komplikované.
 Tohle testování jsem používal jen na začátku vývoje, poté jsem přešel k více sofistikovaným metodám
-![Netcat testovani](/ipk-project-1/App/resources/netcat.png "Netcat")
+
+Zde je příklad testování základní autentikace. Vstupem je příkaz `/auth`, očekávaný výstup je oznámení o úspešné autentikaci.
+
+![Netcat testovani](/ipk-project-1/App/Resources/netcat.png "Netcat")
+
 
 ### E2E testování
 Pro usnadnění práce jsem si napsal TCP a UDP python server, který sice neuměl veškerou funkcionalitu, ale na otestování vetšiny věcí byl dostačující.
 Testoval probíhaly z pohledu uživatele, to znamená psaní do konzole.
-![Python server](/ipk-project-1/App/resources/python-test.png "Python server")
+
+Na obrázku je testování plnohodnté komunikace. Na vstupu jsou všechny příkazy pro autentikaci, zasílání zpráv, a následne ukončení komunikace. Výstupem jsou potom tyto akce správně zalogované na serveru, a správně vypsané do konzole.
+
+![Python server](/ipk-project-1/App/Resources/python-test.png "Python server")
 
 ### Unit testy
-Validace modelů a příkazů byla otestována přes C# unit testy, pomocí framework xUnit. Dále jsem se také pokusil udělat testy už větších částí projektu,
-např. testy pro IProtocol rozhraní. Na ty jsem ještě využil knihovnu `NSubstitute`, kterou jsem použil na mockování síťových věcí.
+Validace modelů a příkazů byla otestována přes C# unit testy, pomocí framework xUnit.
+
+Test na edge case kdy by se uživatel snažil přihlásit se jménem které obsahuje diakritiku, což není povoleno. Očekávaným výstupem testu je vyhození chyby `ValidationException`. Podobné testy jsou vytvořené pro všechny model. Jsou sice základní a repetetivní, ale aspoň potom máme jistotu že v celé aplikaci se pracuje vždy s validními daty.
 ```csharp
     [Fact]
     public void AuthModel_DisplayNameInvalidCharacters()
@@ -139,7 +153,10 @@ např. testy pro IProtocol rozhraní. Na ty jsem ještě využil knihovnu `NSubs
         Assert.Throws<ValidationException>(() => ModelValidator.Validate(model));
     } 
 ```
+ Dále jsem se také pokusil udělat testy už větších částí projektu,
+např. testy pro IProtocol rozhraní. Na ty jsem ještě využil knihovnu `NSubstitute`, kterou jsem použil na mockování síťových věcí.
 
+Tento test testuje zda funguje správně zadání příkazu pro autentikaci. Očekávaným výstupem je, že pres rozhraní protokol budou zaslána správně zparsovaná zpráva s autentikačním modelem. Závislosti klienta jsou mocnuté již zmíněnou knihovnou, aby testy byly izolované, a nezávisely např. na spojení se serverem. K tomu slouží E2E testy.
 ```csharp
 	[Fact]
 	public async Task Auth_Valid()
@@ -172,3 +189,7 @@ např. testy pro IProtocol rozhraní. Na ty jsem ještě využil knihovnu `NSubs
 		Assert.Equal(0, exitCode);
 	}
 ```
+
+Unit testy byly spoušteny v prostředí Rider
+
+![Test output](/ipk-project-1/App/Resources/output.png "Test output")

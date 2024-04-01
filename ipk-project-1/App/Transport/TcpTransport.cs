@@ -41,7 +41,6 @@ public class TcpTransport : ITransport
             if (receivedData is null)
             {
                 ClientLogger.LogDebug("Server has closed the connection");
-                // TODO:
                 throw new ServerUnreachableException("Server has closed the connection");
             }
 

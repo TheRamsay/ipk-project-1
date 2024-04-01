@@ -9,7 +9,6 @@ public class MessageModel : IBaseModel
     public required string Content { get; set; }
 
     [RegularExpression("[!-~]{1,20}", ErrorMessage = "DisplayName has to have printable characters with length from 1 to 128 characters")]
-    // TODO: Add a default value for DisplayName
     public string DisplayName { get; set; } = "user";
 
     public static MessageModel Parse(string data)
