@@ -54,17 +54,17 @@ class TCPServer:
                     logger.error(f"Received error from {display_name}: {' '.join(content)}")
                     await self.send_message(f"BYE\r\n", writer)
                 case ["BYE"]:
-                    logger.debug(f"User {client.display_name} has disconnected")
+                    #logger.debug(f"User {client.display_name} has disconnected")
                     break
                 case _:
                     raise ValueError(f"Invalid message: {message}")
 
         logger.debug("Client disconnected")
         # Remove the client when they disconnect
-        self.clients.remove(writer)
+        # self.clients.remove(writer)
 
     async def broadcast(self, message: str, channel: str = "lobby", from_client: Client = None):
-        print(self.clients)
+        #print(self.clients)
         for client in self.clients:
             if client.current_room != channel or (from_client and client.display_name == from_client.display_name):
                 continue

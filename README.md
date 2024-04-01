@@ -107,17 +107,17 @@ spustí exekuce zbytku programu, a ten se postará o ukončení všech tasků kt
 
 ## Testování
 Vyzkoušel jsem si tři přístupy testování. Všechno testování bylo doprovázeno také programem Wireshark.
-![Wireshark debug](./resources/wireshark.png "Wireshark")
+![Wireshark debug](/ipk-project-1/App/resources/wireshark.png "Wireshark")
 
 ### Ruční testování
 První pokusy o testování byly přes utilitu `natcat`. Použil jsem ji pouze na TCP variantu, jelikož posílat ručně binární zprávy bylo značně komplikované.
 Tohle testování jsem používal jen na začátku vývoje, poté jsem přešel k více sofistikovaným metodám
-![Netcat testovani](./resources/netcat.png "Netcat")
+![Netcat testovani](/ipk-project-1/App/resources/netcat.png "Netcat")
 
 ### E2E testování
 Pro usnadnění práce jsem si napsal TCP a UDP python server, který sice neuměl veškerou funkcionalitu, ale na otestování vetšiny věcí byl dostačující.
 Testoval probíhaly z pohledu uživatele, to znamená psaní do konzole.
-![Python server](./resources/python-test.png "Python server")
+![Python server](/ipk-project-1/App/resources/python-test.png "Python server")
 
 ### Unit testy
 Validace modelů a příkazů byla otestována přes C# unit testy, pomocí framework xUnit. Dále jsem se také pokusil udělat testy už větších částí projektu,
