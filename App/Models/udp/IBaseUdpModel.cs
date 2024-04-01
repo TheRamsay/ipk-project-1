@@ -7,7 +7,6 @@ namespace App.Models.udp;
 
 public interface IBaseUdpModel : IBaseModel
 {
-    public UdpMessageType MessageType { get; set; }
     public static byte[] Serialize(IBaseUdpModel model)
     {
         var properties = model.GetType().GetProperties();
@@ -58,7 +57,7 @@ public interface IBaseUdpModel : IBaseModel
             {UdpMessageType.Bye, typeof(UdpByeModel)}
         };
 
-        Type modelType = messageTypeToModel[(UdpMessageType)data[0]];
+        var modelType = messageTypeToModel[(UdpMessageType)data[0]];
         var model = (IBaseUdpModel)Activator.CreateInstance(modelType);
 
         using var memoryStream = new MemoryStream(data);
@@ -69,7 +68,7 @@ public interface IBaseUdpModel : IBaseModel
         foreach (var property in properties)
         {
 
-            Type propertyType = property.PropertyType;
+            var propertyType = property.PropertyType;
 
             if (propertyType == typeof(UdpMessageType))
             {

@@ -91,6 +91,8 @@ public class UdpTransport : ITransport
         {
             throw new ServerUnreachableException("Invalid server address");
         }
+        
+        // UDP client is listening on all ports
         _client.Client.Bind(new IPEndPoint(ipv4, 0));
 
         while (!_cancellationToken.IsCancellationRequested)
@@ -98,12 +100,12 @@ public class UdpTransport : ITransport
             ClientLogger.LogDebug("Waiting for message...");
             var response = await _client.ReceiveAsync(_cancellationToken);
             var from = response.RemoteEndPoint;
-            var receiveBuffer = response.Buffer;
-            var parsedData = ParseMessage(receiveBuffer);
+            var dataBuffer = response.Buffer;
+            var parsedData = ParseMessage(dataBuffer);
 
             try
             {
-                ModelValidator.Validate(parsedData);
+                ModelValidator.Validate(parsedData.ToBaseModel());
             }
             catch (ValidationException e)
             {

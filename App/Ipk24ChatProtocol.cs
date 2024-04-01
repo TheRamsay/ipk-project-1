@@ -5,7 +5,7 @@ using App.Transport;
 
 namespace App;
 
-public class Ipk24ChatProtocol
+public class Ipk24ChatProtocol: IProtocol
 {
     private readonly ITransport _transport;
     // _messageDeliveredSignal is used for waiting for the message to be delivered (confirmed by the server)

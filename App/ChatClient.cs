@@ -11,15 +11,16 @@ namespace App;
 
 public class ChatClient
 {
-    private readonly Ipk24ChatProtocol _protocol;
+    private readonly IProtocol _protocol;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly IStandardInputReader _standardInputReader;
     private readonly SemaphoreSlim _connectedSignal = new(0, 1);
+    
     private string _displayName = string.Empty;
 
     public ThreadSafeBool Finished { get; set; } = new(false);
 
-    public ChatClient(Ipk24ChatProtocol protocol, IStandardInputReader standardInputReader, CancellationTokenSource cancellationTokenSource)
+    public ChatClient(IProtocol protocol, IStandardInputReader standardInputReader, CancellationTokenSource cancellationTokenSource)
     {
         _cancellationTokenSource = cancellationTokenSource;
         _protocol = protocol;
@@ -29,7 +30,7 @@ public class ChatClient
         _protocol.OnConnected += OnConnectedHandler;
     }
 
-    public async Task Start()
+    public async Task<int> Start()
     {
         var transportTask = _protocol.Start();
         var stdinTask = ReadInputAsync();
@@ -39,21 +40,25 @@ public class ChatClient
         {
             await await Task.WhenAny(transportTask, stdinTask);
         }
+        // Catching OperationCanceledException to handle the cancellation token
         catch (OperationCanceledException)
         {
             ClientLogger.LogInternalError("Operation cancelled.");
         }
+        // If we can't reach the server, we want to log the error and exit, no disconnect needed
         catch (Exception e) when (e is ServerUnreachableException or SocketException)
         {
             statusCode = 1;
             Finished.Value = true;
             ClientLogger.LogInternalError(e.Message);
         }
+        // Exception received from the server, we want to log the error differently
         catch (ServerException e)
         {
             statusCode = 1;
             ClientLogger.LogError(e.ErrorData);
         }
+        // Other internal error
         catch (Exception e)
         {
             statusCode = 1;
@@ -61,6 +66,8 @@ public class ChatClient
         }
         finally
         {
+            // Check if client wasn't finished yet from SIGINT handler
+            // Finished.Value is thread safe, it's using a lock internally
             if (!Finished.Value)
             {
                 Finished.Value = true;
@@ -68,9 +75,9 @@ public class ChatClient
                 // Just to make sure 😏
                 await _cancellationTokenSource.CancelAsync();
             }
-
-            Environment.Exit(statusCode);
         }
+        
+        return statusCode;
     }
 
     public async Task Stop()
@@ -81,6 +88,7 @@ public class ChatClient
 
     private async Task ReadInputAsync()
     {
+        // Wait until the client is connected to the server
         await _connectedSignal.WaitAsync();
 
         while (!_cancellationTokenSource.Token.IsCancellationRequested)
