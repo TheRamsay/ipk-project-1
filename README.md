@@ -28,7 +28,7 @@ Je také efektivnější, protože nevytváří nové vlákno pro každý požad
 Aplikaci jsem rozdělil do více tříd, které se starají o různé části aplikace. Díky tomu je možné využít principu kompozice a injekce závislostí.
 Hlavní části jsou `ChatClient`, `IProtocol`a `ITransport`. Pro přenos dat jsou pak specifikovány modely, které pak mohou být dále specializovány pro protokol.
 
-![Flow diagram](./resources/flow.png "Flow")
+![Flow diagram](/ipk-project-1/App/Resources/flow.png "Flow")
 
 ### Datové modely
 Pro obecnou komunikaci je vyvořené rozhraní `IBaseModel`, které si pak implementují třídy dle typu zprávy (`AuthModel` pro AUTH zprávu). Tyto zprávy se pak předávají ve všech obecných rozhraních. Protokol UDP pak potřebuje nějaké data navíc (MessageID apod.), kvůli tomu vznikly modely pro UDP. Ty jsou sjednoceny přes rozhraní `IBaseUdpModel`. Tohle rozhraní dále implementuje funkce na binární serializaci a deserializaci, které pomocí reflexe zvládnou zpracovat libovolnou UDP třídu. Validace modelů probíhá přes annotační atributy.
@@ -109,10 +109,10 @@ spustí exekuce zbytku programu, a ten se postará o ukončení všech tasků kt
 ## Testování
 Vyzkoušel jsem si tři přístupy testování. Všechno testování bylo doprovázeno také programem Wireshark. 
 
-![Env specs](./resources/specs.png "Specifications")
+![Env specs](/ipk-project-1/App/Resources/specs.png "Specifications")
 *Výpis z testovacího prostředí*
 
-![Wireshark debug](./resources/wireshark.png "Wireshark")
+![Wireshark debug](/ipk-project-1/App/Resources/wireshark.png "Wireshark")
 *Wireshark logy z testu zmíněném v sekci o [E2E testech](#e2e-testování)*
 
 ### Ruční testování
@@ -121,7 +121,7 @@ Tohle testování jsem používal jen na začátku vývoje, poté jsem přešel 
 
 Zde je příklad testování základní autentikace. Vstupem je příkaz `/auth`, očekávaný výstup je oznámení o úspešné autentikaci.
 
-![Netcat testovani](./resources/netcat.png "Netcat")
+![Netcat testovani](/ipk-project-1/App/Resources/netcat.png "Netcat")
 
 
 ### E2E testování
@@ -130,7 +130,7 @@ Testoval probíhaly z pohledu uživatele, to znamená psaní do konzole.
 
 Na obrázku je testování plnohodnté komunikace. Na vstupu jsou všechny příkazy pro autentikaci, zasílání zpráv, a následne ukončení komunikace. Výstupem jsou potom tyto akce správně zalogované na serveru, a správně vypsané do konzole.
 
-![Python server](./resources/python-test.png "Python server")
+![Python server](/ipk-project-1/App/Resources/python-test.png "Python server")
 
 ### Unit testy
 Validace modelů a příkazů byla otestována přes C# unit testy, pomocí framework xUnit.
@@ -192,4 +192,4 @@ Tento test testuje zda funguje správně zadání příkazu pro autentikaci. Oč
 
 Unit testy byly spoušteny v prostředí Rider
 
-![Test output](./resources/output.png "Test output")
+![Test output](/ipk-project-1/App/Resources/output.png "Test output")
