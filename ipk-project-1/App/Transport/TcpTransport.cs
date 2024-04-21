@@ -126,7 +126,7 @@ public class TcpTransport : ITransport
             },
             ["REPLY", _, "IS", ..] => new ReplyModel
             {
-                Status = parts[1] == "OK",
+                Status = partsUpper[1] == "OK" || (partsUpper[1] == "NOK" ? false : throw new InvalidMessageReceivedException("Invalid status")),
                 Content = string.Join(" ", parts.Skip(3))
             },
             ["BYE"] => new ByeModel(),
